@@ -7,7 +7,7 @@ import json
 import typing
 from typing import Literal, TypedDict
 
-from .utils import canonicalize_name
+from . import utils
 
 
 class InvalidContentType(ValueError):
@@ -192,7 +192,7 @@ def parse_list(content_type: str, data: str) -> RawProjectList:
         raise InvalidContentType(content_type)
 
     for project in project_list["projects"]:
-        project["name"] = canonicalize_name(project["name"])
+        project["name"] = utils.canonicalize_name(project["name"])
 
     return project_list
 
