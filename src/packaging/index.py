@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-__lazy_modules__ = ["contextlib", "html.parser", "json"]
+# Make sure anyone importing this module just for the 'Accept' header values
+# doesn't pay an import penalty for other code.
+__lazy_modules__ = ["contextlib", "html.parser", "json", "packaging.utils"]
 import contextlib
 import html.parser
 import json
