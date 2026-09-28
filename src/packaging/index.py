@@ -198,3 +198,17 @@ def parse_list(content_type: str, data: str) -> RawProjectList:
 
 
 # XXX parse_details(content_type: str, data: str) -> RawProjectDetails
+# No 'size' data, so statically declare API version 1.0 with bonus details,
+# or be incorrect by leaving off the size? Or use a dummy value like -1?
+
+# API version
+# url                                  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=The%20href%20attribute%20MUST%20be%20a%20URL%20that%20links%20to%20the%20location%20of%20the%20file%20for%20download
+# filename                             https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=the%20text%20of%20the%20anchor%20tag%20MUST%20match%20the%20final%20path%20component%20(the%20filename)%20of%20the%20URL.
+# hash                                 https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=Each%20file%20URL%20SHOULD%20include%20a%20hash%20in%20the%20form%20of%20a%20URL%20fragment%20with%20the%20following%20syntax%3A%20%23%3Chashname%3E%3D%3Chashvalue%3E
+# core-metadata                        https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Dcore,attribute%E2%80%99s%20value%20if%20a%20hash%20is%20unavailable.
+# dist-info-metadata                   https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Ddist%2Dinfo%2Dmetadata%20attribute%20on%20a%20file%20link.
+# gpg-sig                              https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Dgpg%2Dsig%20attribute%20on%20a%20file%20link%20with%20a%20value%20of%20either%20true%20or%20false%20to%20indicate%20whether%20or%20not%20there%20is%20a%20GPG%20signature.
+# requires-python (needs unescaping!)  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Drequires,%26lt%3B%20and%20%26gt%3B%2C%20respectively.
+# yanked                               https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=The%20data%2Dyanked%20attribute%20may%20have%20no%20value%2C%20or%20may%20have%20an%20arbitrary%20string%20as%20a%20value.%20The%20presence%20of%20a%20data%2Dyanked%20attribute%20SHOULD%20be%20interpreted%20as%20indicating%20that%20the%20file%20pointed%20to%20by%20this%20particular%20link%20has%20been%20%E2%80%9CYanked%E2%80%9D
+# provenance                           https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Dprovenance%20attribute%20on%20a%20file%20link.%20The%20value%20of%20this%20attribute%20MUST%20be%20a%20fully%20qualified%20URL
+# status                               https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20pypi,an%20arbitrary%20string%20if%20present.
