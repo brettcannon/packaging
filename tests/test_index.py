@@ -26,14 +26,14 @@ class TestParseList:
             """)
         result = index.parse_list(content_type, html_spec_example)
         expect = {
-            "meta": {"api_version": "1.0"},
+            "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
         }
         assert result == expect
 
     def test_json_content_type(self) -> None:
         expect = {
-            "meta": {"api_version": "1.0"},
+            "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
         }
         result = index.parse_list(index.ACCEPT_JSON_V1, json.dumps(expect))
@@ -41,11 +41,11 @@ class TestParseList:
 
     def test_canonical_names_json(self) -> None:
         given = {
-            "meta": {"api_version": "1.0"},
+            "meta": {"api-version": "1.0"},
             "projects": [{"name": "Frob"}, {"name": "Spam_Spam_spam"}],
         }
         expect = {
-            "meta": {"api_version": "1.0"},
+            "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spam-spam-spam"}],
         }
         result = index.parse_list(index.ACCEPT_JSON_V1, json.dumps(given))
@@ -57,7 +57,7 @@ class TestParseList:
             '<a href="/Spam_Spam_spam/">Spam_Spam_spam</a></body></html>'
         )
         expect = {
-            "meta": {"api_version": "1.0"},
+            "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spam-spam-spam"}],
         }
         result = index.parse_list("text/html", html)
@@ -87,7 +87,7 @@ class TestParseList:
             </html>
             """)
         expect = {
-            "meta": {"api_version": api_version},
+            "meta": {"api-version": api_version},
             "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
         }
         result = index.parse_list(index._ACCEPT_HTML_VALUES[0], html)
