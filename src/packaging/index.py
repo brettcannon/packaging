@@ -97,7 +97,11 @@ _RawProjectDetailsFileOptional = TypedDict(
 class RawProjectDetailsFile(
     _RawProjectDetailsFileRequired, _RawProjectDetailsFileOptional
 ):
-    """The :class:`~typing.TypedDict` JSON representation of the objects contained in the "files" key of :class:`RawProjectDetails`."""  # noqa: E501
+    """The :class:`~typing.TypedDict` JSON representation of the objects contained in the "files" key of :class:`RawProjectDetails`.
+
+    Do note that the 'size' key is not considered required; it doesn't exist in
+    API version 1.0 nor is it supported by the HTML API.
+    """  # noqa: E501
 
 
 class _RawProjectDetailsStatus(TypedDict, total=False):
