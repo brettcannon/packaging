@@ -4,6 +4,7 @@ __lazy_modules__ = ["contextlib", "html.parser", "json"]
 import contextlib
 import html.parser
 import json
+import typing
 from typing import Literal, TypedDict
 
 from .utils import canonicalize_name
@@ -142,15 +143,15 @@ class _RawProjectListHTMLParser(html.parser.HTMLParser):
         self.names = []
         self.parsing_anchor = False
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "a":
             self.parsing_anchor = True
-        elif tag == "meta":
+        elif tag == "meta" and attrs:
             attrs_dict = dict(attrs)
             if (
-                "name" in attrs_dict
-                and "content" in attrs_dict
-                and attrs_dict["name"] == "pypi:repository-version"
+                "content" in attrs_dict
+                and attrs_dict["content"] is not None
+                and attrs_dict.get("name") == "pypi:repository-version"
             ):
                 self.api_version = attrs_dict["content"]
 
@@ -182,8 +183,9 @@ def parse_list(content_type: str, data: str) -> RawProjectList:
     elif any(content_type.startswith(mime_type) for mime_type in _ACCEPT_HTML_VALUES):
         with contextlib.closing(_RawProjectListHTMLParser()) as parser:
             parser.feed(data)
+        meta = typing.cast("_RawProjectMeta", {"api-version": parser.api_version})
         project_list = {
-            "meta": {"api_version": parser.api_version},
+            "meta": meta,
             "projects": [{"name": name} for name in parser.names],
         }
     else:
