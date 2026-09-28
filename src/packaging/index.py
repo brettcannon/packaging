@@ -198,17 +198,3 @@ def parse_list(content_type: str, data: str) -> RawProjectList:
 
 
 # XXX parse_details(content_type: str, data: str) -> RawProjectDetails
-
-
-# XXX class ProjectList
-# XXX     @classmethod
-# XXX     def from_html(cls, content: str) -> ProjectList
-# XXX     @classmethod
-# XXX     def from_json(cls, raw_list: RawProjectList) -> ProjectList
-
-
-# XXX class ProjectDetails
-# XXX     @classmethod
-# XXX     def from_html(cls, content: str) -> ProjectList
-# XXX     @classmethod
-# XXX     def from_json(cls, raw_details: RawProjectDetails) -> ProjectList
