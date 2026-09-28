@@ -204,8 +204,11 @@ def parse_list(content_type: str, data: str) -> RawProjectList:
 
 
 # XXX parse_details(content_type: str, data: str) -> RawProjectDetails
+
 # No 'size' data, so statically declare API version 1.0 with bonus details,
 # or be incorrect by leaving off the size? Or use a dummy value like -1?
+# FYI Mousebender statically sets it to 1.0, but that was before the HTML API
+# had a way to declare the API version.
 
 # API version
 # url                                  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=The%20href%20attribute%20MUST%20be%20a%20URL%20that%20links%20to%20the%20location%20of%20the%20file%20for%20download
