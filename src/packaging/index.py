@@ -69,19 +69,19 @@ class _RawProjectDetailsFileRequired(TypedDict):
 # optional keys into separate classes that are then combined via
 # multiple inheritance.
 # Once Python 3.11 is the oldest supported version, the classes should be
-# flattened to work with more_autodoc.
+# flattened to work with autodoc.
 _RawProjectDetailsFileOptional = TypedDict(
     "_RawProjectDetailsFileOptional",
     {
         # 1.0
-        "requires-python": str,  # XXX specific type for specifiers?
+        "requires-python": str,  # XXX specific type for specifier strings?
         "dist-info-metadata": bool | dict[str, str],  # Deprecated
         "gpg-sig": bool,
         "yanked": bool | str,
         # PEP 714
         "core-metadata": bool | dict[str, str],
         # 1.1
-        "size": int,  # Mandatory for 1.1+
+        "size": int,  # Mandatory for 1.1+, but not available for the HTML API.
         "upload-time": str,  # XXX specific type for timestamps?
         # 1.3
         "provenance": str | None,
@@ -91,7 +91,7 @@ _RawProjectDetailsFileOptional = TypedDict(
 
 
 # Once Python 3.11 is the oldest supported version, the classes should be
-# flattened to work with more_autodoc.
+# flattened to work with autodoc.
 class RawProjectDetailsFile(
     _RawProjectDetailsFileRequired, _RawProjectDetailsFileOptional
 ):
@@ -124,7 +124,7 @@ _RawProjectDetailsOptional = TypedDict(
 
 
 # Once Python 3.11 is the oldest supported version, the classes should be
-# flattened to work with more_autodoc.
+# flattened to work with autodoc.
 class RawProjectDetails(_RawProjectDetailsRequired, _RawProjectDetailsOptional):
     """The :class:`~typing.TypedDict` JSON representation of the project details from an index server.
 
