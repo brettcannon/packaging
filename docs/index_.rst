@@ -4,20 +4,21 @@ Index
 
 .. currentmodule:: packaging.index
 
-XXX what the module is about
+Help make requests to and work with responses from index servers implementing the
+:ref:`Simple Repository API <simple-repository-api>`.
 
 Usage
 -----
 
 .. code-block:: python-console
 
-    >>> from packaging.index import parse_list
+    >>> from packaging.index import ACCEPT, parse_list
     >>> import requests
-    >>> response = requests.get("https://pypi.org/simple/")
+    >>> response = requests.get("https://pypi.org/simple/", headers={"ACCEPT": ACCEPT})
     >>> project_list = parse_list(response.headers["content-type"], response.text)
+    >>> len(project_list["projects"]) > 900_000
+    True
 
-
-XXX manually test the example
 
 Reference
 ---------
