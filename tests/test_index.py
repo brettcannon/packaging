@@ -92,3 +92,28 @@ class TestParseList:
         }
         result = index.parse_list(index._ACCEPT_HTML_VALUES[0], html)
         assert result == expect
+
+    def test_html_data_whitespace(self) -> None:
+        html = textwrap.dedent("""
+            <!DOCTYPE html>
+            <html>
+            <body>
+                <a href="/frob/">
+                    frob
+                </a>
+                <a href="/spamspamspam/">
+                    spamspamspam
+                </a>
+            </body>
+            </html>
+            """)
+        expect = {
+            "meta": {"api-version": "1.0"},
+            "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
+        }
+        result = index.parse_list("text/html", html)
+        assert result == expect
+
+
+class TestParseDetails:
+    pass

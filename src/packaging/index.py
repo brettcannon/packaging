@@ -139,10 +139,21 @@ class RawProjectDetails(_RawProjectDetailsRequired, _RawProjectDetailsOptional):
     """  # noqa: E501
 
 
-class _RawProjectListHTMLParser(html.parser.HTMLParser):
+class _RawProjectMetaHTMLParser(html.parser.HTMLParser):
+    api_version: str = "1.0"
+
+    def _handle_meta(self, attrs: dict[str, str | None]) -> None:
+        if (
+            "content" in attrs
+            and attrs["content"] is not None
+            and attrs.get("name") == "pypi:repository-version"
+        ):
+            self.api_version = attrs["content"]
+
+
+class _RawProjectListHTMLParser(_RawProjectMetaHTMLParser):
     names: list[str]
     parsing_anchor: bool
-    api_version: str = "1.0"
 
     def __init__(self) -> None:
         super().__init__()
@@ -154,16 +165,11 @@ class _RawProjectListHTMLParser(html.parser.HTMLParser):
             self.parsing_anchor = True
         elif tag == "meta" and attrs:
             attrs_dict = dict(attrs)
-            if (
-                "content" in attrs_dict
-                and attrs_dict["content"] is not None
-                and attrs_dict.get("name") == "pypi:repository-version"
-            ):
-                self.api_version = attrs_dict["content"]
+            self._handle_meta(attrs_dict)
 
     def handle_data(self, data: str) -> None:
         if self.parsing_anchor:
-            self.names.append(data)
+            self.names.append(data.strip())
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "a":
@@ -176,7 +182,7 @@ def parse_list(content_type: str, data: str) -> RawProjectList:
     If the content type is :data:`ACCEPT_JSON_V1` then the data string is
     deserialized as JSON. If the content type is from :data:`ACCEPT_HTML` then
     the HTML is parsed and the data is converted to the appropriate JSON
-    representation. All other content types raise :class:`InvalidContentType`.
+    representation. All other content types raise :exc:`InvalidContentType`.
 
     Regardless of content type, all data is normalized by storing the canonical
     project names. No other normalization or validation is performed.
