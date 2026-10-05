@@ -2,7 +2,7 @@ Index
 =====
 
 
-.. currentmodule:: packaging.index
+.. module:: packaging.index
 
 Help make requests to and work with responses from index servers implementing the
 :ref:`Simple Repository API <simple-repository-api>`.
@@ -47,6 +47,9 @@ Low Level Interface
 
 Exceptions
 ''''''''''
+
+.. autoclass:: packaging.index.IndexServerException
+    :members:
 
 .. autoclass:: packaging.index.InvalidContentType
     :members:

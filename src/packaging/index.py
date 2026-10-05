@@ -12,7 +12,11 @@ from typing import Literal, TypedDict
 from . import utils
 
 
-class InvalidContentType(ValueError):
+class IndexServerException(Exception):
+    """Base exception for all exceptions related to :mod:`packaging.index`."""
+
+
+class InvalidContentType(ValueError, IndexServerException):
     """An invalid content type for an index server to respond with.
 
     Valid content types are encapsulated by :data:`ACCEPT`.
