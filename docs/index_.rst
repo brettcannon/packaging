@@ -44,6 +44,8 @@ Low Level Interface
 
 .. autofunction:: packaging.index.parse_list
 
+.. autofunction:: packaging.index.parse_details
+
 
 Exceptions
 ''''''''''
@@ -52,4 +54,7 @@ Exceptions
     :members:
 
 .. autoclass:: packaging.index.InvalidContentType
+    :members:
+
+.. autoclass:: packaging.index.InvalidHTMLAttributeValue
     :members:

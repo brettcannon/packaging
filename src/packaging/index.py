@@ -6,8 +6,9 @@ __lazy_modules__ = ["contextlib", "json", "packaging.utils", "urllib.parse"]
 import contextlib
 import html.parser  # HTMLParser used as a base class.
 import json
-import typing
-from typing import Literal, TypedDict
+import typing  # The `from ... import` forces an eager import.
+import urllib.parse
+from typing import Any, Literal, TypedDict  # TypedDict used as a base class.
 
 from . import utils
 
@@ -27,6 +28,18 @@ class InvalidContentType(ValueError, IndexServerException):
     def __init__(self, content_type: str) -> None:
         self.content_type = content_type
         super().__init__(f"Invalid content type: {content_type}")
+
+
+class InvalidHTMLAttributeValue(ValueError, IndexServerException):
+    """Invalid data returned from an index server serving HTML data."""
+
+    attr: str
+    value: str
+
+    def __init__(self, attr: str, value: Any) -> None:
+        self.attr = attr
+        self.value = repr(value)
+        super().__init__(f"invalid value for HTML attribute {self.attr}: {self.value}")
 
 
 ACCEPT_JSON_V1 = "application/vnd.pypi.simple.v1+json"
@@ -213,21 +226,114 @@ def parse_list(content_type: str, data: str) -> RawProjectList:
     return project_list
 
 
-# XXX parse_details(content_type: str, data: str) -> RawProjectDetails
+class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
+    files: list[str]
+    current_file: dict[str, typing.Any] | None
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.files = []
+        self.current_file = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag not in {"a", "meta"}:
+            return
+
+        attrs_dict = dict(attrs)
+
+        if tag == "meta":
+            self._handle_meta(attrs_dict)
+        else:  # "a"
+            self.current_file = {"hashes": {}}
+            for name, value in attrs_dict.items():
+                try:
+                    method = getattr(self, f"_handle_{name.replace('-', '_')}")
+                except AttributeError:  # noqa: PERF203
+                    continue
+                else:
+                    method(value)
+
+    def _handle_href(self, value: str | None) -> None:
+        if value:
+            self.current_file["url"] = value
+
+    def _handle_data_core_metadata(self, value: str | None) -> None:
+        result = True
+        if value:
+            if "=" in value:
+                hash_algo, _, hash_value = value.partition("=")
+                result = {hash_algo: hash_value}
+            elif value != "true":
+                raise InvalidHTMLAttributeValue("data-core-metadata", value)
+        self.current_file["core-metadata"] = result
+
+    # Since dist-info-metdata is the same as core-metadata but deprecated, it's
+    # okay to just hoist the data up to core-metadata.
+    _handle_data_dist_info_metadata = _handle_data_core_metadata
+
+    def _handle_data_gpg_sig(self, value: str | None) -> None:
+        match value:
+            case "true":
+                has_sig = True
+            case "false":
+                has_sig = False
+            case _:
+                raise InvalidHTMLAttributeValue("data-gpg-sig", value)
+        self.current_file["gpg-sig"] = has_sig
+
+    def handle_data(self, data: str) -> None:
+        if self.current_file is not None:
+            self.current_file["filename"] = data.strip()
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "a" and self.current_file is not None:
+            self.files.append(self.current_file)
+            self.current_file = None
+
+
+def parse_details(
+    content_type: str, data: str, request_url: str | None = None
+) -> RawProjectDetails:
+    """Parse the project details response from an index server based on *content_type*.
+
+    If the content type is :data:`ACCEPT_JSON_V1` then the data string is
+    deserialized as JSON. If the content type is from :data:`ACCEPT_HTML` then
+    the HTML is parsed and the data is converted to the appropriate JSON
+    representation. All other content types raise :exc:`InvalidContentType`.
+
+    When invalid data is detected while parsing HTML,
+    :exc:`InvalidHTMLAttributeValue` is raised.
+
+    Some normalization is done regardless of the content type. If *request_url*
+    -- which is expected to be the URL used to make the request -- is provided
+    then the 'filename' key is used to make sure the URL provided is absolute.
+    If either the 'core-metadata' or 'dist-info-metadata' key is set and the
+    other is not then the unset key is filled with the other's value.
+    """  # noqa: E501
+    content_type = content_type.lower()
+    project_details: RawProjectDetails
+    if content_type == ACCEPT_JSON_V1:
+        project_details = json.loads(data)
+    # Watch out for content types that specify the encoding!
+    elif any(content_type.startswith(mime_type) for mime_type in _ACCEPT_HTML_VALUES):
+        with contextlib.closing(_RawProjectDetailsHTMLParser()) as parser:
+            parser.feed(data)
+        meta = typing.cast("_RawProjectMeta", {"api-version": parser.api_version})
+        project_details = {"meta": meta, "files": parser.files}
+        # XXX status
+    # XXX relative URLs
+    # core-metadata/dist-info-metadata
+
+    return project_details
+
 
 # No 'size' data, so statically declare API version 1.0 with bonus details,
 # or be incorrect by leaving off the size? Or use a dummy value like -1?
 # FYI Mousebender statically sets it to 1.0, but that was before the HTML API
 # had a way to declare the API version.
 
-# API version
-# url                                  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=The%20href%20attribute%20MUST%20be%20a%20URL%20that%20links%20to%20the%20location%20of%20the%20file%20for%20download
-# filename                             https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=the%20text%20of%20the%20anchor%20tag%20MUST%20match%20the%20final%20path%20component%20(the%20filename)%20of%20the%20URL.
 # hash                                 https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=Each%20file%20URL%20SHOULD%20include%20a%20hash%20in%20the%20form%20of%20a%20URL%20fragment%20with%20the%20following%20syntax%3A%20%23%3Chashname%3E%3D%3Chashvalue%3E
-# core-metadata                        https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Dcore,attribute%E2%80%99s%20value%20if%20a%20hash%20is%20unavailable.
-# dist-info-metadata                   https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Ddist%2Dinfo%2Dmetadata%20attribute%20on%20a%20file%20link.
-# gpg-sig                              https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Dgpg%2Dsig%20attribute%20on%20a%20file%20link%20with%20a%20value%20of%20either%20true%20or%20false%20to%20indicate%20whether%20or%20not%20there%20is%20a%20GPG%20signature.
-# requires-python (needs unescaping!)  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Drequires,%26lt%3B%20and%20%26gt%3B%2C%20respectively.
-# yanked                               https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=The%20data%2Dyanked%20attribute%20may%20have%20no%20value%2C%20or%20may%20have%20an%20arbitrary%20string%20as%20a%20value.%20The%20presence%20of%20a%20data%2Dyanked%20attribute%20SHOULD%20be%20interpreted%20as%20indicating%20that%20the%20file%20pointed%20to%20by%20this%20particular%20link%20has%20been%20%E2%80%9CYanked%E2%80%9D
-# provenance                           https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Dprovenance%20attribute%20on%20a%20file%20link.%20The%20value%20of%20this%20attribute%20MUST%20be%20a%20fully%20qualified%20URL
-# status                               https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20pypi,an%20arbitrary%20string%20if%20present.
+# data-requires-python (needs unescaping!)  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Drequires,%26lt%3B%20and%20%26gt%3B%2C%20respectively.
+# data-yanked                               https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=The%20data%2Dyanked%20attribute%20may%20have%20no%20value%2C%20or%20may%20have%20an%20arbitrary%20string%20as%20a%20value.%20The%20presence%20of%20a%20data%2Dyanked%20attribute%20SHOULD%20be%20interpreted%20as%20indicating%20that%20the%20file%20pointed%20to%20by%20this%20particular%20link%20has%20been%20%E2%80%9CYanked%E2%80%9D
+# data-provenance                           https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Dprovenance%20attribute%20on%20a%20file%20link.%20The%20value%20of%20this%20attribute%20MUST%20be%20a%20fully%20qualified%20URL
+# pypi:project-status / pypi:project-status-reason  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20pypi,an%20arbitrary%20string%20if%20present.

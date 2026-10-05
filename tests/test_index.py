@@ -6,7 +6,27 @@ import pytest
 from packaging import index
 
 
-class TestParseList:
+class ParseBaseTests:
+    def test_invalid_content_type(self) -> None:
+        raise NotImplementedError
+
+    def test_html_content_type(self, content_type: str) -> None:
+        raise NotImplementedError
+
+    def test_json_content_type(self) -> None:
+        raise NotImplementedError
+
+    def test_html_api_version(self, meta_tag: str, api_version: str) -> None:
+        raise NotImplementedError
+
+    def test_html_data_whitespace(self) -> None:
+        raise NotImplementedError
+
+    def test_html_extra_tags(self) -> None:
+        raise NotImplementedError
+
+
+class TestParseList(ParseBaseTests):
     def test_invalid_content_type(self) -> None:
         with pytest.raises(index.InvalidContentType):
             index.parse_list("invalid/content-type", "")
@@ -39,33 +59,10 @@ class TestParseList:
         result = index.parse_list(index.ACCEPT_JSON_V1, json.dumps(expect))
         assert result == expect
 
-    def test_canonical_names_json(self) -> None:
-        given = {
-            "meta": {"api-version": "1.0"},
-            "projects": [{"name": "Frob"}, {"name": "Spam_Spam_spam"}],
-        }
-        expect = {
-            "meta": {"api-version": "1.0"},
-            "projects": [{"name": "frob"}, {"name": "spam-spam-spam"}],
-        }
-        result = index.parse_list(index.ACCEPT_JSON_V1, json.dumps(given))
-        assert result == expect
-
-    def test_canonical_names_html(self) -> None:
-        html = (
-            '<html><body><a href="/Frob/">Frob</a>'
-            '<a href="/Spam_Spam_spam/">Spam_Spam_spam</a></body></html>'
-        )
-        expect = {
-            "meta": {"api-version": "1.0"},
-            "projects": [{"name": "frob"}, {"name": "spam-spam-spam"}],
-        }
-        result = index.parse_list("text/html", html)
-        assert result == expect
-
     @pytest.mark.parametrize(
         ("meta_tag", "api_version"),
         [
+            ("", "1.0"),
             ('<meta name="pypi:repository-version" content="1.4"></meta>', "1.4"),
             ('<meta name="pypi:repository-version" content="1.4">', "1.4"),
             ('<meta name="pypi:repository-version" content="1.4" />', "1.4"),
@@ -114,6 +111,198 @@ class TestParseList:
         result = index.parse_list("text/html", html)
         assert result == expect
 
+    def test_html_extra_tags(self) -> None:
+        html_spec_example = textwrap.dedent("""
+            <!DOCTYPE html>
+            <html>
+            <body>
+                <a href="/frob/">frob</a><br />
+                <a href="/spamspamspam/">spamspamspam</a>
+            </body>
+            </html>
+            """)
+        result = index.parse_list(index._ACCEPT_HTML_VALUES[0], html_spec_example)
+        expect = {
+            "meta": {"api-version": "1.0"},
+            "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
+        }
+        assert result == expect
 
-class TestParseDetails:
-    pass
+    def test_canonical_names_json(self) -> None:
+        given = {
+            "meta": {"api-version": "1.0"},
+            "projects": [{"name": "Frob"}, {"name": "Spam_Spam_spam"}],
+        }
+        expect = {
+            "meta": {"api-version": "1.0"},
+            "projects": [{"name": "frob"}, {"name": "spam-spam-spam"}],
+        }
+        result = index.parse_list(index.ACCEPT_JSON_V1, json.dumps(given))
+        assert result == expect
+
+    def test_canonical_names_html(self) -> None:
+        html = (
+            '<html><body><a href="/Frob/">Frob</a>'
+            '<a href="/Spam_Spam_spam/">Spam_Spam_spam</a></body></html>'
+        )
+        expect = {
+            "meta": {"api-version": "1.0"},
+            "projects": [{"name": "frob"}, {"name": "spam-spam-spam"}],
+        }
+        result = index.parse_list("text/html", html)
+        assert result == expect
+
+
+class TestParseDetails(ParseBaseTests):
+    def test_invalid_content_type(self) -> None:
+        with pytest.raises(index.InvalidContentType):
+            index.parse_list("invalid/content-type", "")
+
+    @pytest.mark.parametrize(
+        "content_type", [*index._ACCEPT_HTML_VALUES, "text/html; charset=utf-8"]
+    )
+    def test_html_content_type(self, content_type: str) -> None:
+        given = textwrap.dedent("""
+            <html>
+            <body>
+            <a href="https://files.pythonhosted.org/spam/spam-1.0.tar.gz">spam-1.0.tar.gz</a>
+            </body>
+            </html>
+        """)
+        expect = {
+            "meta": {"api-version": "1.0"},
+            "files": [
+                {
+                    "filename": "spam-1.0.tar.gz",
+                    "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                    "hashes": {},
+                }
+            ],
+        }
+        result = index.parse_details(content_type, given)
+
+        assert result == expect
+
+    def test_json_content_type(self) -> None:
+        expect = {
+            "meta": {"api-version": "1.0"},
+            "files": [
+                {
+                    "filename": "spam-1.0.tar.gz",
+                    "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                    "hashes": {},
+                }
+            ],
+        }
+        result = index.parse_details(index.ACCEPT_JSON_V1, json.dumps(expect))
+
+        assert result == expect
+
+    @pytest.mark.parametrize(
+        ("meta_tag", "api_version"),
+        [
+            ("", "1.0"),
+            ('<meta name="pypi:repository-version" content="1.4"></meta>', "1.4"),
+            ('<meta name="pypi:repository-version" content="1.4">', "1.4"),
+            ('<meta name="pypi:repository-version" content="1.4" />', "1.4"),
+            ('<meta content="1.4" ></meta>', "1.0"),
+            ('<meta name="pypi:repository-version"></meta', "1.0"),
+        ],
+    )
+    def test_html_api_version(self, meta_tag: str, api_version: str) -> None:
+        given = textwrap.dedent(f"""
+            <html>
+            <head>
+                {meta_tag}
+            <body>
+                <a href="https://files.pythonhosted.org/spam/spam-1.0.tar.gz">spam-1.0.tar.gz</a>
+            </body>
+            </html>
+        """)
+        expect = {
+            "meta": {"api-version": api_version},
+            "files": [
+                {
+                    "filename": "spam-1.0.tar.gz",
+                    "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                    "hashes": {},
+                }
+            ],
+        }
+        result = index.parse_details(index._ACCEPT_HTML_VALUES[0], given)
+
+        assert result == expect
+
+    def test_html_data_whitespace(self) -> None:
+        given = textwrap.dedent("""
+            <html>
+            <body>
+            <a href="https://files.pythonhosted.org/spam/spam-1.0.tar.gz">
+                spam-1.0.tar.gz
+            </a>
+            </body>
+            </html>
+        """)
+        expect = {
+            "meta": {"api-version": "1.0"},
+            "files": [
+                {
+                    "filename": "spam-1.0.tar.gz",
+                    "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                    "hashes": {},
+                }
+            ],
+        }
+        result = index.parse_details(index._ACCEPT_HTML_VALUES[0], given)
+
+        assert result == expect
+
+    def test_html_extra_tags(self) -> None:
+        given = textwrap.dedent("""
+            <html>
+            <body>
+            <a href="https://files.pythonhosted.org/spam/spam-1.0.tar.gz">spam-1.0.tar.gz</a><br />
+            </body>
+            </html>
+        """)  # noqa: E501
+        expect = {
+            "meta": {"api-version": "1.0"},
+            "files": [
+                {
+                    "filename": "spam-1.0.tar.gz",
+                    "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                    "hashes": {},
+                }
+            ],
+        }
+        result = index.parse_details(index._ACCEPT_HTML_VALUES[0], given)
+
+        assert result == expect
+
+    def test_html_filename(self) -> None:
+        # XXX
+        pass
+
+    def test_html_url(self) -> None:
+        # XXX
+        pass
+
+    def test_html_relative_url(self) -> None:
+        # XXX
+        pass
+
+    def test_html_core_metadata(self) -> None:
+        # XXX
+        pass
+
+    def test_html_dist_info_metadata(self) -> None:
+        # XXX
+        pass
+
+    def test_html_gpg_sig(self) -> None:
+        # XXX
+        pass
+
+    def test_html_invalid_gpg_sig_value(self) -> None:
+        # XXX
+        pass
