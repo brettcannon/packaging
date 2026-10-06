@@ -1,4 +1,5 @@
 import json
+import typing
 
 import pytest
 
@@ -46,14 +47,14 @@ class TestParseList(ParseBaseTests):
             </html>
         """
         result = index.parse_list(content_type, html_spec_example)
-        expect = {
+        expect: index.RawProjectList = {
             "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
         }
         assert result == expect
 
     def test_json_content_type(self) -> None:
-        expect = {
+        expect: index.RawProjectList = {
             "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
         }
@@ -84,10 +85,13 @@ class TestParseList(ParseBaseTests):
             </body>
             </html>
         """
-        expect = {
-            "meta": {"api-version": api_version},
-            "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
-        }
+        expect: index.RawProjectList = typing.cast(
+            "index.RawProjectList",
+            {
+                "meta": {"api-version": api_version},
+                "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
+            },
+        )
         result = index.parse_list(HTML_CONTENT_TYPE, html)
         assert result == expect
 
@@ -105,7 +109,7 @@ class TestParseList(ParseBaseTests):
             </body>
             </html>
         """
-        expect = {
+        expect: index.RawProjectList = {
             "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
         }
@@ -123,18 +127,18 @@ class TestParseList(ParseBaseTests):
             </html>
         """
         result = index.parse_list(HTML_CONTENT_TYPE, html_spec_example)
-        expect = {
+        expect: index.RawProjectList = {
             "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
         }
         assert result == expect
 
     def test_canonical_names_json(self) -> None:
-        given = {
+        given: index.RawProjectList = {
             "meta": {"api-version": "1.0"},
             "projects": [{"name": "Frob"}, {"name": "Spam_Spam_spam"}],
         }
-        expect = {
+        expect: index.RawProjectList = {
             "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spam-spam-spam"}],
         }
@@ -146,7 +150,7 @@ class TestParseList(ParseBaseTests):
             '<html><body><a href="/Frob/">Frob</a>'
             '<a href="/Spam_Spam_spam/">Spam_Spam_spam</a></body></html>'
         )
-        expect = {
+        expect: index.RawProjectList = {
             "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spam-spam-spam"}],
         }
@@ -159,6 +163,10 @@ class TestParseDetails(ParseBaseTests):
         with pytest.raises(index.InvalidContentType):
             index.parse_list("invalid/content-type", "")
 
+    def test_html_name_from_url(self) -> None:
+        # XXX
+        pass
+
     @pytest.mark.parametrize(
         "content_type", [*index._ACCEPT_HTML_VALUES, "text/html; charset=utf-8"]
     )
@@ -170,8 +178,9 @@ class TestParseDetails(ParseBaseTests):
             </body>
             </html>
         """
-        expect = {
+        expect: index.RawProjectDetails = {
             "meta": {"api-version": "1.0"},
+            "name": "spam",
             "files": [
                 {
                     "filename": "spam-1.0.tar.gz",
@@ -180,13 +189,14 @@ class TestParseDetails(ParseBaseTests):
                 }
             ],
         }
-        result = index.parse_details(content_type, given)
+        result = index.parse_details(content_type, given, name="spam")
 
         assert result == expect
 
     def test_json_content_type(self) -> None:
-        expect = {
+        expect: index.RawProjectDetails = {
             "meta": {"api-version": "1.0"},
+            "name": "spam",
             "files": [
                 {
                     "filename": "spam-1.0.tar.gz",
@@ -195,7 +205,9 @@ class TestParseDetails(ParseBaseTests):
                 }
             ],
         }
-        result = index.parse_details(index.ACCEPT_JSON_V1, json.dumps(expect))
+        result = index.parse_details(
+            index.ACCEPT_JSON_V1, json.dumps(expect), name="spam"
+        )
 
         assert result == expect
 
@@ -220,17 +232,21 @@ class TestParseDetails(ParseBaseTests):
             </body>
             </html>
         """
-        expect = {
-            "meta": {"api-version": api_version},
-            "files": [
-                {
-                    "filename": "spam-1.0.tar.gz",
-                    "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
-                    "hashes": {},
-                }
-            ],
-        }
-        result = index.parse_details(HTML_CONTENT_TYPE, given)
+        expect: index.RawProjectDetails = typing.cast(
+            "index.RawProjectDetails",
+            {
+                "meta": {"api-version": api_version},
+                "name": "spam",
+                "files": [
+                    {
+                        "filename": "spam-1.0.tar.gz",
+                        "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                        "hashes": {},
+                    }
+                ],
+            },
+        )
+        result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
         assert result == expect
 
@@ -244,8 +260,9 @@ class TestParseDetails(ParseBaseTests):
             </body>
             </html>
         """
-        expect = {
+        expect: index.RawProjectDetails = {
             "meta": {"api-version": "1.0"},
+            "name": "spam",
             "files": [
                 {
                     "filename": "spam-1.0.tar.gz",
@@ -254,7 +271,7 @@ class TestParseDetails(ParseBaseTests):
                 }
             ],
         }
-        result = index.parse_details(HTML_CONTENT_TYPE, given)
+        result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
         assert result == expect
 
@@ -266,8 +283,9 @@ class TestParseDetails(ParseBaseTests):
             </body>
             </html>
         """  # noqa: E501
-        expect = {
+        expect: index.RawProjectDetails = {
             "meta": {"api-version": "1.0"},
+            "name": "spam",
             "files": [
                 {
                     "filename": "spam-1.0.tar.gz",
@@ -276,7 +294,7 @@ class TestParseDetails(ParseBaseTests):
                 }
             ],
         }
-        result = index.parse_details(HTML_CONTENT_TYPE, given)
+        result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
         assert result == expect
 
@@ -311,10 +329,11 @@ class TestParseDetails(ParseBaseTests):
             json_value, index.IndexServerException
         ):
             with pytest.raises(json_value):
-                index.parse_details(HTML_CONTENT_TYPE, given)
+                index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
         else:
-            expect = {
+            expect: index.RawProjectDetails = {
                 "meta": {"api-version": "1.0"},
+                "name": "spam",
                 "files": [
                     {
                         "filename": "spam-1.0.tar.gz",
@@ -325,7 +344,7 @@ class TestParseDetails(ParseBaseTests):
                     }
                 ],
             }
-            result = index.parse_details(HTML_CONTENT_TYPE, given)
+            result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
             assert result == expect
 
@@ -360,10 +379,11 @@ class TestParseDetails(ParseBaseTests):
             json_value, index.IndexServerException
         ):
             with pytest.raises(json_value):
-                index.parse_details(HTML_CONTENT_TYPE, given)
+                index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
         else:
-            expect = {
+            expect: index.RawProjectDetails = {
                 "meta": {"api-version": "1.0"},
+                "name": "spam",
                 "files": [
                     {
                         "filename": "spam-1.0.tar.gz",
@@ -374,7 +394,7 @@ class TestParseDetails(ParseBaseTests):
                     }
                 ],
             }
-            result = index.parse_details(HTML_CONTENT_TYPE, given)
+            result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
             assert result == expect
 
@@ -390,6 +410,32 @@ class TestParseDetails(ParseBaseTests):
     def test_html_gpg_sig(self, attr_value: str, json_value: bool) -> None:
         # XXX
         pass
+
+    @pytest.mark.parametrize(
+        ("content_type", "data", "args"),
+        [
+            (
+                index.ACCEPT_JSON_V1,
+                '{"meta": {"api-version": "1.0"}, "name": "Spam_Spam", "files": []}',
+                {"name": "Spam-SPAM"},
+            ),
+            (HTML_CONTENT_TYPE, "", {"name": "Spam_Spam"}),
+            (HTML_CONTENT_TYPE, "", {"request_url": "https://pypi.org/simple/Spam/"}),
+        ],
+    )
+    def test_normalized_name(
+        self, content_type: str, data: str, args: dict[str, str]
+    ) -> None:
+        # XXX
+        return
+        expect: index.RawProjectDetails = {
+            "meta": {"api-version": "1.0"},
+            "name": "spam-spam",
+            "files": [],
+        }
+        result = index.parse_details(content_type, data, **args)
+
+        assert result == expect
 
     @pytest.mark.parametrize(
         ("request_url", "href", "url"),

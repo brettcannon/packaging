@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # Make sure anyone importing this module just for the 'Accept' header values
-# doesn't pay an uncessary import penalty for other code.
+# doesn't pay an unnecessary import penalty for other code.
 __lazy_modules__ = {
     "contextlib",
     "json",
@@ -12,8 +12,7 @@ import contextlib
 import html.parser  # HTMLParser used as a base class.
 import json
 import typing  # The `from ... import` forces an eager import.
-import urllib.parse
-from typing import Any, Literal, TypedDict  # TypedDict used as a base class.
+from typing import Literal, TypedDict  # TypedDict is used as a base class.
 
 from . import utils
 
@@ -41,7 +40,7 @@ class InvalidHTMLAttributeValue(ValueError, IndexServerException):
     attr: str
     value: str
 
-    def __init__(self, attr: str, value: Any) -> None:
+    def __init__(self, attr: str, value: object) -> None:
         self.attr = attr
         self.value = repr(value)
         super().__init__(f"invalid value for HTML attribute {self.attr}: {self.value}")
@@ -232,13 +231,16 @@ def parse_list(content_type: str, data: str) -> RawProjectList:
 
 
 class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
-    files: list[str]
-    current_file: dict[str, typing.Any] | None
+    files: list[RawProjectDetailsFile]
+    current_file: dict[str, typing.Any]
 
     def __init__(self) -> None:
         super().__init__()
         self.files = []
-        self.current_file = None
+        self.current_file = self._new_file()
+
+    def _new_file(self) -> dict[str, typing.Any]:
+        return {"hashes": {}}
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag not in {"a", "meta"}:
@@ -249,7 +251,7 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
         if tag == "meta":
             self._handle_meta(attrs_dict)
         else:  # "a"
-            self.current_file = {"hashes": {}}
+            self.current_file = self._new_file()
             for name, value in attrs_dict.items():
                 try:
                     method = getattr(self, f"_handle_{name.replace('-', '_')}")
@@ -259,11 +261,11 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
                     method(value)
 
     def _handle_href(self, value: str | None) -> None:
-        if value:
+        if value and self.current_file:
             self.current_file["url"] = value
 
     def _process_metadata(self, key: str, value: str | None) -> None:
-        result = True
+        result: dict[str, str] | bool = True
         if value:
             if "=" in value:
                 hash_algo, _, hash_value = value.partition("=")
@@ -291,19 +293,46 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
         self.current_file["gpg-sig"] = has_sig
 
     def handle_data(self, data: str) -> None:
-        if self.current_file is not None:
-            self.current_file["filename"] = data.strip()
+        self.current_file["filename"] = data.strip()
 
     def handle_endtag(self, tag: str) -> None:
-        if tag == "a" and self.current_file is not None:
-            self.files.append(self.current_file)
-            self.current_file = None
+        if tag == "a":
+            self.files.append(typing.cast("RawProjectDetailsFile", self.current_file))
+            self.current_file = self._new_file()
+
+
+@typing.overload
+def parse_details(
+    content_type: str,
+    data: str,
+    *,
+    name: str,
+    _request_url: str | None = None,
+) -> RawProjectDetails: ...
+
+
+@typing.overload
+def parse_details(
+    content_type: str,
+    data: str,
+    *,
+    name: str | None = None,
+    _request_url: str,
+) -> RawProjectDetails: ...
 
 
 def parse_details(
-    content_type: str, data: str, request_url: str | None = None
+    content_type: str,
+    data: str,
+    *,
+    name: str | None = None,
+    _request_url: str | None = None,
 ) -> RawProjectDetails:
     """Parse the project details response from an index server based on *content_type*.
+
+    Either *name* or *request_url* must be provided in order to have the
+    project name for an HTML response. If *request_url* is provided then the
+    last portion of the URL is used for the project name.
 
     If the content type is :data:`ACCEPT_JSON_V1` then the data string is
     deserialized as JSON. If the content type is from :data:`ACCEPT_HTML` then
@@ -313,14 +342,14 @@ def parse_details(
     When invalid data is detected while parsing HTML,
     :exc:`InvalidHTMLAttributeValue` is raised.
 
-    Some normalization is done regardless of the content type. If *request_url*
-    -- which is expected to be the URL used to make the request -- is provided
-    then the 'filename' key is used to make sure the URL provided is absolute.
-    If either the 'core-metadata' or 'dist-info-metadata' key is set and the
-    other is not then the unset key is filled with the other's value. Any
-    dictionaries containing hash algorithm names as keys will have those
-    name lowercased.
-    """  # noqa: E501
+    Some normalization is done regardless of the content type. The 'name' key
+    is made canonical. If *request_url* -- which is expected to be the URL used
+    to make the request -- is provided then the 'filename' key is used to make
+    sure the URL provided is absolute. If either the 'core-metadata' or
+    'dist-info-metadata' key is set and the other is not then the unset key is
+    filled with the other's value. Any dictionaries containing hash algorithm
+    names as keys will have those name lowercased.
+    """
     content_type = content_type.lower()
     project_details: RawProjectDetails
     if content_type == ACCEPT_JSON_V1:
@@ -330,8 +359,14 @@ def parse_details(
         with contextlib.closing(_RawProjectDetailsHTMLParser()) as parser:
             parser.feed(data)
         meta = typing.cast("_RawProjectMeta", {"api-version": parser.api_version})
-        project_details = {"meta": meta, "files": parser.files}
+        # XXX name from URL if *name* is empty
+        project_details = {
+            "meta": meta,
+            "name": name or "XXX",
+            "files": parser.files,
+        }
         # XXX status
+    project_details["name"] = utils.canonicalize_name(project_details["name"])
     for file in project_details["files"]:
         for keys_with_hash_dicts in ["core-metadata", "dist-info-metadata", "hashes"]:
             hashes = file.get(keys_with_hash_dicts, {})
