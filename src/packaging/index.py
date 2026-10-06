@@ -332,16 +332,19 @@ def parse_details(
         meta = typing.cast("_RawProjectMeta", {"api-version": parser.api_version})
         project_details = {"meta": meta, "files": parser.files}
         # XXX status
-    for file in project_details.get("files", []):
-        for hashes in {"core-metadata", "dist-info-metadata", "hashes"}:
-            hashes_dict = file.get(hashes, {})
-            if not isinstance(hashes_dict, dict):
+    for file in project_details["files"]:
+        for keys_with_hash_dicts in ["core-metadata", "dist-info-metadata", "hashes"]:
+            hashes = file.get(keys_with_hash_dicts, {})
+            if not isinstance(hashes, dict):
                 continue
-            for key in list(hashes_dict.keys()):
-                value = hashes_dict.pop(key)
-                hashes_dict[key.lower()] = value
+            for key in list(hashes.keys()):
+                value = hashes.pop(key)
+                hashes[key.lower()] = value
+        if "core-metadata" in file and "dist-info-metadata" not in file:
+            file["dist-info-metadata"] = file["core-metadata"]
+        elif "dist-info-metadata" in file and "core-metadata" not in file:
+            file["core-metadata"] = file["dist-info-metadata"]
     # XXX relative URLs
-    # XXX core-metadata/dist-info-metadata
 
     return project_details
 

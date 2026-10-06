@@ -321,6 +321,7 @@ class TestParseDetails(ParseBaseTests):
                         "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
                         "hashes": {},
                         "core-metadata": json_value,
+                        "dist-info-metadata": json_value,
                     }
                 ],
             }
@@ -369,6 +370,7 @@ class TestParseDetails(ParseBaseTests):
                         "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
                         "hashes": {},
                         "dist-info-metadata": json_value,
+                        "core-metadata": json_value,
                     }
                 ],
             }
