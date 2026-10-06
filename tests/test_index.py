@@ -163,10 +163,6 @@ class TestParseDetails(ParseBaseTests):
         with pytest.raises(index.InvalidContentType):
             index.parse_list("invalid/content-type", "")
 
-    def test_html_name_from_url(self) -> None:
-        # XXX
-        pass
-
     @pytest.mark.parametrize(
         "content_type", [*index._ACCEPT_HTML_VALUES, "text/html; charset=utf-8"]
     )
@@ -210,6 +206,10 @@ class TestParseDetails(ParseBaseTests):
         )
 
         assert result == expect
+
+    def test_html_name_from_url(self) -> None:
+        # XXX
+        pass
 
     @pytest.mark.parametrize(
         ("meta_tag", "api_version"),
@@ -408,8 +408,39 @@ class TestParseDetails(ParseBaseTests):
         ],
     )
     def test_html_gpg_sig(self, attr_value: str, json_value: bool) -> None:
-        # XXX
-        pass
+        given = f"""
+            <html>
+            <body>
+                <a
+                    href="https://files.pythonhosted.org/spam/spam-1.0.tar.gz"
+                    data-gpg-sig{attr_value}
+                >
+                        spam-1.0.tar.gz
+                </a>
+            </body>
+            </html>
+        """
+        if isinstance(json_value, type) and issubclass(
+            json_value, index.IndexServerException
+        ):
+            with pytest.raises(json_value):
+                index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+        else:
+            expect: index.RawProjectDetails = {
+                "meta": {"api-version": "1.0"},
+                "name": "spam",
+                "files": [
+                    {
+                        "filename": "spam-1.0.tar.gz",
+                        "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                        "hashes": {},
+                        "gpg-sig": json_value,
+                    }
+                ],
+            }
+            result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+
+            assert result == expect
 
     @pytest.mark.parametrize(
         ("content_type", "data", "args"),
@@ -420,7 +451,11 @@ class TestParseDetails(ParseBaseTests):
                 {"name": "Spam-SPAM"},
             ),
             (HTML_CONTENT_TYPE, "", {"name": "Spam_Spam"}),
-            (HTML_CONTENT_TYPE, "", {"request_url": "https://pypi.org/simple/Spam/"}),
+            (
+                HTML_CONTENT_TYPE,
+                "",
+                {"request_url": "https://pypi.org/simple/Spam_Spam/"},
+            ),
         ],
     )
     def test_normalized_name(
