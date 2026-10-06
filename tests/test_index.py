@@ -1,9 +1,10 @@
 import json
-import textwrap
 
 import pytest
 
 from packaging import index
+
+HTML_CONTENT_TYPE = index._ACCEPT_HTML_VALUES[0]
 
 
 class ParseBaseTests:
@@ -35,7 +36,7 @@ class TestParseList(ParseBaseTests):
         "content_type", [*index._ACCEPT_HTML_VALUES, "text/html; charset=utf-8"]
     )
     def test_html_content_type(self, content_type: str) -> None:
-        html_spec_example = textwrap.dedent("""
+        html_spec_example = """
             <!DOCTYPE html>
             <html>
             <body>
@@ -43,7 +44,7 @@ class TestParseList(ParseBaseTests):
                 <a href="/spamspamspam/">spamspamspam</a>
             </body>
             </html>
-            """)
+        """
         result = index.parse_list(content_type, html_spec_example)
         expect = {
             "meta": {"api-version": "1.0"},
@@ -71,7 +72,7 @@ class TestParseList(ParseBaseTests):
         ],
     )
     def test_html_api_version(self, meta_tag: str, api_version: str) -> None:
-        html = textwrap.dedent(f"""
+        html = f"""
             <!DOCTYPE html>
             <html>
             <head>
@@ -82,16 +83,16 @@ class TestParseList(ParseBaseTests):
                 <a href="/spamspamspam/">spamspamspam</a>
             </body>
             </html>
-            """)
+        """
         expect = {
             "meta": {"api-version": api_version},
             "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
         }
-        result = index.parse_list(index._ACCEPT_HTML_VALUES[0], html)
+        result = index.parse_list(HTML_CONTENT_TYPE, html)
         assert result == expect
 
     def test_html_data_whitespace(self) -> None:
-        html = textwrap.dedent("""
+        html = """
             <!DOCTYPE html>
             <html>
             <body>
@@ -103,7 +104,7 @@ class TestParseList(ParseBaseTests):
                 </a>
             </body>
             </html>
-            """)
+        """
         expect = {
             "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
@@ -112,7 +113,7 @@ class TestParseList(ParseBaseTests):
         assert result == expect
 
     def test_html_extra_tags(self) -> None:
-        html_spec_example = textwrap.dedent("""
+        html_spec_example = """
             <!DOCTYPE html>
             <html>
             <body>
@@ -120,8 +121,8 @@ class TestParseList(ParseBaseTests):
                 <a href="/spamspamspam/">spamspamspam</a>
             </body>
             </html>
-            """)
-        result = index.parse_list(index._ACCEPT_HTML_VALUES[0], html_spec_example)
+        """
+        result = index.parse_list(HTML_CONTENT_TYPE, html_spec_example)
         expect = {
             "meta": {"api-version": "1.0"},
             "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
@@ -162,13 +163,13 @@ class TestParseDetails(ParseBaseTests):
         "content_type", [*index._ACCEPT_HTML_VALUES, "text/html; charset=utf-8"]
     )
     def test_html_content_type(self, content_type: str) -> None:
-        given = textwrap.dedent("""
+        given = """
             <html>
             <body>
             <a href="https://files.pythonhosted.org/spam/spam-1.0.tar.gz">spam-1.0.tar.gz</a>
             </body>
             </html>
-        """)
+        """
         expect = {
             "meta": {"api-version": "1.0"},
             "files": [
@@ -210,7 +211,7 @@ class TestParseDetails(ParseBaseTests):
         ],
     )
     def test_html_api_version(self, meta_tag: str, api_version: str) -> None:
-        given = textwrap.dedent(f"""
+        given = f"""
             <html>
             <head>
                 {meta_tag}
@@ -218,7 +219,7 @@ class TestParseDetails(ParseBaseTests):
                 <a href="https://files.pythonhosted.org/spam/spam-1.0.tar.gz">spam-1.0.tar.gz</a>
             </body>
             </html>
-        """)
+        """
         expect = {
             "meta": {"api-version": api_version},
             "files": [
@@ -229,12 +230,12 @@ class TestParseDetails(ParseBaseTests):
                 }
             ],
         }
-        result = index.parse_details(index._ACCEPT_HTML_VALUES[0], given)
+        result = index.parse_details(HTML_CONTENT_TYPE, given)
 
         assert result == expect
 
     def test_html_data_whitespace(self) -> None:
-        given = textwrap.dedent("""
+        given = """
             <html>
             <body>
             <a href="https://files.pythonhosted.org/spam/spam-1.0.tar.gz">
@@ -242,7 +243,7 @@ class TestParseDetails(ParseBaseTests):
             </a>
             </body>
             </html>
-        """)
+        """
         expect = {
             "meta": {"api-version": "1.0"},
             "files": [
@@ -253,18 +254,18 @@ class TestParseDetails(ParseBaseTests):
                 }
             ],
         }
-        result = index.parse_details(index._ACCEPT_HTML_VALUES[0], given)
+        result = index.parse_details(HTML_CONTENT_TYPE, given)
 
         assert result == expect
 
     def test_html_extra_tags(self) -> None:
-        given = textwrap.dedent("""
+        given = """
             <html>
             <body>
             <a href="https://files.pythonhosted.org/spam/spam-1.0.tar.gz">spam-1.0.tar.gz</a><br />
             </body>
             </html>
-        """)  # noqa: E501
+        """  # noqa: E501
         expect = {
             "meta": {"api-version": "1.0"},
             "files": [
@@ -275,34 +276,130 @@ class TestParseDetails(ParseBaseTests):
                 }
             ],
         }
-        result = index.parse_details(index._ACCEPT_HTML_VALUES[0], given)
+        result = index.parse_details(HTML_CONTENT_TYPE, given)
 
         assert result == expect
 
-    def test_html_filename(self) -> None:
+    @pytest.mark.parametrize(
+        ("attr_value", "json_value"),
+        [
+            ("=true", True),
+            ("", True),  # XXX spec a bit unclear in this case
+            ('="sha256=12345abcde"', {"sha256": "12345abcde"}),
+            ('="SHA256=12345abcde"', {"sha256": "12345abcde"}),
+            ("=false", index.InvalidHTMLAttributeValue),
+        ],
+    )
+    def test_html_core_metadata(
+        self,
+        attr_value: str,
+        json_value: bool | dict[str, str] | type[index.IndexServerException],
+    ) -> None:
+        given = f"""
+            <html>
+            <body>
+                <a
+                    href="https://files.pythonhosted.org/spam/spam-1.0.tar.gz"
+                    data-core-metadata{attr_value}
+                >
+                        spam-1.0.tar.gz
+                </a>
+            </body>
+            </html>
+        """
+        if isinstance(json_value, type) and issubclass(
+            json_value, index.IndexServerException
+        ):
+            with pytest.raises(json_value):
+                index.parse_details(HTML_CONTENT_TYPE, given)
+        else:
+            expect = {
+                "meta": {"api-version": "1.0"},
+                "files": [
+                    {
+                        "filename": "spam-1.0.tar.gz",
+                        "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                        "hashes": {},
+                        "core-metadata": json_value,
+                    }
+                ],
+            }
+            result = index.parse_details(HTML_CONTENT_TYPE, given)
+
+            assert result == expect
+
+    @pytest.mark.parametrize(
+        ("attr_value", "json_value"),
+        [
+            ("=true", True),
+            ("", True),  # XXX spec a bit unclear in this case
+            ('="sha256=12345abcde"', {"sha256": "12345abcde"}),
+            ('="SHA256=12345abcde"', {"sha256": "12345abcde"}),
+            ("=false", index.InvalidHTMLAttributeValue),
+        ],
+    )
+    def test_html_dist_info_metadata(
+        self,
+        attr_value: str,
+        json_value: bool | dict[str, str] | type[index.IndexServerException],
+    ) -> None:
+        given = f"""
+            <html>
+            <body>
+                <a
+                    href="https://files.pythonhosted.org/spam/spam-1.0.tar.gz"
+                    data-dist-info-metadata{attr_value}
+                >
+                        spam-1.0.tar.gz
+                </a>
+            </body>
+            </html>
+        """
+        if isinstance(json_value, type) and issubclass(
+            json_value, index.IndexServerException
+        ):
+            with pytest.raises(json_value):
+                index.parse_details(HTML_CONTENT_TYPE, given)
+        else:
+            expect = {
+                "meta": {"api-version": "1.0"},
+                "files": [
+                    {
+                        "filename": "spam-1.0.tar.gz",
+                        "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                        "hashes": {},
+                        "dist-info-metadata": json_value,
+                    }
+                ],
+            }
+            result = index.parse_details(HTML_CONTENT_TYPE, given)
+
+            assert result == expect
+
+    @pytest.mark.parametrize(
+        ("attr_value", "json_value"),
+        [
+            ("=true", True),
+            ("=false", False),
+            ("", index.InvalidHTMLAttributeValue),
+            ('="https://example.com"', index.InvalidHTMLAttributeValue),
+        ],
+    )
+    def test_html_gpg_sig(self, attr_value: str, json_value: bool) -> None:
         # XXX
         pass
 
-    def test_html_url(self) -> None:
-        # XXX
-        pass
-
-    def test_html_relative_url(self) -> None:
-        # XXX
-        pass
-
-    def test_html_core_metadata(self) -> None:
-        # XXX
-        pass
-
-    def test_html_dist_info_metadata(self) -> None:
-        # XXX
-        pass
-
-    def test_html_gpg_sig(self) -> None:
-        # XXX
-        pass
-
-    def test_html_invalid_gpg_sig_value(self) -> None:
+    @pytest.mark.parametrize(
+        ("request_url", "href", "url"),
+        [
+            (
+                "https://pypi.org/simple/spam/",
+                "spam-1.0.tar.gz",
+                "https://pypi.org/simple/spam/spam-1.0.tar.gz",
+            ),
+            # XXX
+        ],
+    )
+    def test_html_relative_url(self, request_url: str, href: str, url: str) -> None:
         # XXX
         pass

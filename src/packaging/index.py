@@ -2,7 +2,12 @@ from __future__ import annotations
 
 # Make sure anyone importing this module just for the 'Accept' header values
 # doesn't pay an uncessary import penalty for other code.
-__lazy_modules__ = ["contextlib", "json", "packaging.utils", "urllib.parse"]
+__lazy_modules__ = {
+    "contextlib",
+    "json",
+    "urllib.parse",
+    f"{__spec__.parent}.utils",
+}
 import contextlib
 import html.parser  # HTMLParser used as a base class.
 import json
@@ -257,19 +262,23 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
         if value:
             self.current_file["url"] = value
 
-    def _handle_data_core_metadata(self, value: str | None) -> None:
+    def _process_metadata(self, key: str, value: str | None) -> None:
         result = True
         if value:
             if "=" in value:
                 hash_algo, _, hash_value = value.partition("=")
+                if not (hash_algo and hash_value):
+                    raise InvalidHTMLAttributeValue(f"data-{key}", value)
                 result = {hash_algo: hash_value}
             elif value != "true":
-                raise InvalidHTMLAttributeValue("data-core-metadata", value)
-        self.current_file["core-metadata"] = result
+                raise InvalidHTMLAttributeValue(f"data-{key}", value)
+        self.current_file[key] = result
 
-    # Since dist-info-metdata is the same as core-metadata but deprecated, it's
-    # okay to just hoist the data up to core-metadata.
-    _handle_data_dist_info_metadata = _handle_data_core_metadata
+    def _handle_data_core_metadata(self, value: str | None) -> None:
+        self._process_metadata("core-metadata", value)
+
+    def _handle_data_dist_info_metadata(self, value: str | None) -> None:
+        self._process_metadata("dist-info-metadata", value)
 
     def _handle_data_gpg_sig(self, value: str | None) -> None:
         match value:
@@ -308,7 +317,9 @@ def parse_details(
     -- which is expected to be the URL used to make the request -- is provided
     then the 'filename' key is used to make sure the URL provided is absolute.
     If either the 'core-metadata' or 'dist-info-metadata' key is set and the
-    other is not then the unset key is filled with the other's value.
+    other is not then the unset key is filled with the other's value. Any
+    dictionaries containing hash algorithm names as keys will have those
+    name lowercased.
     """  # noqa: E501
     content_type = content_type.lower()
     project_details: RawProjectDetails
@@ -321,8 +332,16 @@ def parse_details(
         meta = typing.cast("_RawProjectMeta", {"api-version": parser.api_version})
         project_details = {"meta": meta, "files": parser.files}
         # XXX status
+    for file in project_details.get("files", []):
+        for hashes in {"core-metadata", "dist-info-metadata", "hashes"}:
+            hashes_dict = file.get(hashes, {})
+            if not isinstance(hashes_dict, dict):
+                continue
+            for key in list(hashes_dict.keys()):
+                value = hashes_dict.pop(key)
+                hashes_dict[key.lower()] = value
     # XXX relative URLs
-    # core-metadata/dist-info-metadata
+    # XXX core-metadata/dist-info-metadata
 
     return project_details
 
