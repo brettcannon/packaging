@@ -404,7 +404,8 @@ def parse_details(
             file["dist-info-metadata"] = file["core-metadata"]
         elif "dist-info-metadata" in file and "core-metadata" not in file:
             file["core-metadata"] = file["dist-info-metadata"]
-    # XXX relative URLs
+        if request_url and "url" in file:
+            file["url"] = urllib.parse.urljoin(request_url, file["url"])
 
     return project_details
 

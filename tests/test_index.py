@@ -610,5 +610,26 @@ class TestParseDetails(ParseBaseTests):
         ],
     )
     def test_html_relative_url(self, request_url: str, href: str, url: str) -> None:
-        # XXX
-        pass
+        given = f"""
+                    <html>
+                    <body>
+                    <a
+                        href="{href}"
+                    >spam-1.0.tar.gz</a>
+                    </body>
+                    </html>
+                """
+        expect: index.RawProjectDetails = {
+            "meta": {"api-version": "1.0"},
+            "name": "spam",
+            "files": [
+                {
+                    "filename": "spam-1.0.tar.gz",
+                    "url": url,
+                    "hashes": {},
+                }
+            ],
+        }
+        result = index.parse_details(HTML_CONTENT_TYPE, given, request_url=request_url)
+
+        assert result == expect
