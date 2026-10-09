@@ -211,9 +211,23 @@ class TestParseDetails(ParseBaseTests):
 
         assert result == expect
 
-    def test_html_name_from_url(self) -> None:
-        # XXX
-        pass
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://pypi.org/simple/spam-spam/",
+            "https://pypi.irg/simple/spam-spam",
+            "https://pypi.irg/simple/spAm_Spam",
+        ],
+    )
+    def test_html_name_from_url(self, url: str) -> None:
+        expect: index.RawProjectDetails = {
+            "meta": {"api-version": "1.0"},
+            "name": "spam-spam",
+            "files": [],
+        }
+        result = index.parse_details(HTML_CONTENT_TYPE, "", request_url=url)
+
+        assert result == expect
 
     @pytest.mark.parametrize(
         ("meta_tag", "api_version"),
@@ -377,7 +391,7 @@ class TestParseDetails(ParseBaseTests):
         ("attr_value", "json_value"),
         [
             ("=true", True),
-            ("", True),  # XXX spec a bit unclear in this case
+            ("", True),  # Spec doesn't say this is right, but it's unambiguous.
             ('="sha256=12345abcde"', {"sha256": "12345abcde"}),
             ('="SHA256=12345abcde"', {"sha256": "12345abcde"}),
             ("=false", index.InvalidHTMLAttributeValue),
@@ -425,7 +439,7 @@ class TestParseDetails(ParseBaseTests):
         ("attr_value", "json_value"),
         [
             ("=true", True),
-            ("", True),  # XXX spec a bit unclear in this case
+            ("", True),  # Spec doesn't say this is correct, but it's unambiguous.
             ('="sha256=12345abcde"', {"sha256": "12345abcde"}),
             ('="SHA256=12345abcde"', {"sha256": "12345abcde"}),
             ("=false", index.InvalidHTMLAttributeValue),
@@ -571,8 +585,6 @@ class TestParseDetails(ParseBaseTests):
     def test_normalized_name(
         self, content_type: str, data: str, args: dict[str, str]
     ) -> None:
-        # XXX
-        return
         expect: index.RawProjectDetails = {
             "meta": {"api-version": "1.0"},
             "name": "spam-spam",
@@ -590,7 +602,11 @@ class TestParseDetails(ParseBaseTests):
                 "spam-1.0.tar.gz",
                 "https://pypi.org/simple/spam/spam-1.0.tar.gz",
             ),
-            # XXX
+            (
+                "https://example.com/simple/spam/",
+                "https://pypi.org/simple/spam/spam-1.0.tar.gz",
+                "https://pypi.org/simple/spam/spam-1.0.tar.gz",
+            ),
         ],
     )
     def test_html_relative_url(self, request_url: str, href: str, url: str) -> None:

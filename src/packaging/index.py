@@ -236,13 +236,11 @@ def parse_list(content_type: str, data: str) -> RawProjectList:
 class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
     files: list[RawProjectDetailsFile]
     current_file: dict[str, typing.Any]
-    url_parts: dict[str, urllib.parse.SplitResult]
 
     def __init__(self) -> None:
         super().__init__()
         self.files = []
         self.current_file = self._new_file()
-        self.url_parts = {}
 
     def _new_file(self) -> dict[str, typing.Any]:
         return {"hashes": {}}
@@ -268,8 +266,7 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
     def _handle_href(self, value: str | None) -> None:
         if value:
             self.current_file["url"] = value
-            self.url_parts[value] = url_parts = urllib.parse.urlsplit(value)
-            if fragment := url_parts.fragment:
+            if fragment := urllib.parse.urlsplit(value).fragment:
                 if fragment.count("=") != 1:
                     raise InvalidHTMLAttributeValue("href", value)
                 hash_algo, _, hash_value = fragment.partition("=")
@@ -323,7 +320,7 @@ def parse_details(
     data: str,
     *,
     name: str,
-    _request_url: str | None = None,
+    request_url: str | None = None,
 ) -> RawProjectDetails: ...
 
 
@@ -333,7 +330,7 @@ def parse_details(
     data: str,
     *,
     name: str | None = None,
-    _request_url: str,
+    request_url: str,
 ) -> RawProjectDetails: ...
 
 
@@ -342,7 +339,7 @@ def parse_details(
     data: str,
     *,
     name: str | None = None,
-    _request_url: str | None = None,
+    request_url: str | None = None,
 ) -> RawProjectDetails:
     """Parse the project details response from an index server based on *content_type*.
 
@@ -366,6 +363,8 @@ def parse_details(
     filled with the other's value. Any dictionaries containing hash algorithm
     names as keys will have those name lowercased.
     """
+    if name is None and request_url is None:
+        raise TypeError("expected either *name* or *request_url* to be provided")
     content_type = content_type.lower()
     project_details: RawProjectDetails
     if content_type == ACCEPT_JSON_V1:
@@ -375,10 +374,16 @@ def parse_details(
         with contextlib.closing(_RawProjectDetailsHTMLParser()) as parser:
             parser.feed(data)
         meta = typing.cast("_RawProjectMeta", {"api-version": parser.api_version})
-        # XXX name from URL if *name* is empty
+
+        if name:
+            project_name = name
+        else:
+            path = urllib.parse.urlsplit(request_url).path
+            project_name = path.removesuffix("/").rpartition("/")[-1]
+
         project_details = {
             "meta": meta,
-            "name": name or "XXX",
+            "name": utils.canonicalize_name(project_name),
             "files": parser.files,
         }
         # XXX status
