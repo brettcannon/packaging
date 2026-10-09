@@ -566,6 +566,34 @@ class TestParseDetails(ParseBaseTests):
 
             assert result == expect
 
+    @pytest.mark.parametrize(("attr", "value"), [("", True), ('="bad"', "bad")])
+    def test_html_yanked(self, attr: str, value: str) -> None:
+        given = f"""
+            <html>
+            <body>
+            <a
+                href="https://example.com/spam/spam-1.0.tar.gz"
+                data-yanked{attr}
+            >spam-1.0.tar.gz</a>
+            </body>
+            </html>
+        """
+        expect: index.RawProjectDetails = {
+            "meta": {"api-version": "1.0"},
+            "name": "spam",
+            "files": [
+                {
+                    "filename": "spam-1.0.tar.gz",
+                    "url": "https://example.com/spam/spam-1.0.tar.gz",
+                    "hashes": {},
+                    "yanked": value,
+                }
+            ],
+        }
+        result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+
+        assert result == expect
+
     @pytest.mark.parametrize(
         ("content_type", "data", "args"),
         [
