@@ -4,11 +4,13 @@ from __future__ import annotations
 # doesn't pay an unnecessary import penalty for other code.
 __lazy_modules__ = {
     "contextlib",
+    "html",
     "json",
     "urllib.parse",
     f"{__spec__.parent}.utils",
 }
 import contextlib
+import html
 import html.parser  # HTMLParser used as a base class.
 import json
 import typing  # The `from ... import` forces an eager import.
@@ -301,6 +303,11 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
                 raise InvalidHTMLAttributeValue("data-gpg-sig", value)
         self.current_file["gpg-sig"] = has_sig
 
+    def _handle_data_requires_python(self, value: str | None) -> None:
+        if value is None:
+            raise InvalidHTMLAttributeValue("data-requires-python", value)
+        self.current_file["requires-python"] = html.unescape(value)
+
     def handle_data(self, data: str) -> None:
         self.current_file["filename"] = data.strip()
 
@@ -398,7 +405,6 @@ def parse_details(
 # FYI Mousebender statically sets it to 1.0, but that was before the HTML API
 # had a way to declare the API version.
 
-# data-requires-python (needs unescaping!)  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Drequires,%26lt%3B%20and%20%26gt%3B%2C%20respectively.
 # data-yanked                               https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=The%20data%2Dyanked%20attribute%20may%20have%20no%20value%2C%20or%20may%20have%20an%20arbitrary%20string%20as%20a%20value.%20The%20presence%20of%20a%20data%2Dyanked%20attribute%20SHOULD%20be%20interpreted%20as%20indicating%20that%20the%20file%20pointed%20to%20by%20this%20particular%20link%20has%20been%20%E2%80%9CYanked%E2%80%9D
 # data-provenance                           https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Dprovenance%20attribute%20on%20a%20file%20link.%20The%20value%20of%20this%20attribute%20MUST%20be%20a%20fully%20qualified%20URL
 # pypi:project-status / pypi:project-status-reason  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20pypi,an%20arbitrary%20string%20if%20present.
