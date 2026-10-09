@@ -302,6 +302,10 @@ class TestParseDetails(ParseBaseTests):
 
         assert result == expect
 
+    def test_json_hash_algorithm_normalization(self) -> None:
+        # XXX
+        pass
+
     @pytest.mark.parametrize(
         ("url", "hash"),
         [
@@ -315,7 +319,7 @@ class TestParseDetails(ParseBaseTests):
             ),
         ],
     )
-    def test_hashes(
+    def test_html_hashes(
         self, url: str, hash: dict[str, str] | type[index.IndexServerException]
     ) -> None:
         given = f"""
@@ -490,7 +494,7 @@ class TestParseDetails(ParseBaseTests):
             ("", index.InvalidHTMLAttributeValue),
         ],
     )
-    def test_requires_python(
+    def test_html_requires_python(
         self, data_value: str, specifier_value: str | type[index.IndexServerException]
     ) -> None:
         given = f"""
