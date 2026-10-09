@@ -303,8 +303,33 @@ class TestParseDetails(ParseBaseTests):
         assert result == expect
 
     def test_json_hash_algorithm_normalization(self) -> None:
-        # XXX
-        pass
+        given = {
+            "meta": {"api-version": "1.0"},
+            "name": "spam",
+            "files": [
+                {
+                    "filename": "spam-1.0.tar.gz",
+                    "url": "https://example.com/spam/spam-1.0.tar.gz",
+                    "hashes": {"SHA256": "abcd12345"},
+                }
+            ],
+        }
+        expect: index.RawProjectDetails = {
+            "meta": {"api-version": "1.0"},
+            "name": "spam",
+            "files": [
+                {
+                    "filename": "spam-1.0.tar.gz",
+                    "url": "https://example.com/spam/spam-1.0.tar.gz",
+                    "hashes": {"sha256": "abcd12345"},
+                }
+            ],
+        }
+        result = index.parse_details(
+            index.ACCEPT_JSON_V1, json.dumps(given), name="spam"
+        )
+
+        assert result == expect
 
     @pytest.mark.parametrize(
         ("url", "hash"),
