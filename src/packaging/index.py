@@ -353,7 +353,9 @@ def parse_details(
     representation. All other content types raise :exc:`InvalidContentType`.
 
     When invalid data is detected while parsing HTML,
-    :exc:`InvalidHTMLAttributeValue` is raised.
+    :exc:`InvalidHTMLAttributeValue` is raised. Attempts are made, though, to
+    accept non-standard but unambiguous results (.e.g, the data-core-metadata
+    attribute being specified with no value).
 
     Some normalization is done regardless of the content type. The 'name' key
     is made canonical. If *request_url* -- which is expected to be the URL used
