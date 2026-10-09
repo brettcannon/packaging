@@ -382,6 +382,7 @@ def parse_details(
             "files": parser.files,
         }
         # XXX status
+
     project_details["name"] = utils.canonicalize_name(project_details["name"])
     for file in project_details["files"]:
         for keys_with_hash_dicts in ["core-metadata", "dist-info-metadata", "hashes"]:
@@ -391,6 +392,7 @@ def parse_details(
             for key in list(hashes.keys()):
                 value = hashes.pop(key)
                 hashes[key.lower()] = value
+
         if "core-metadata" in file and "dist-info-metadata" not in file:
             file["dist-info-metadata"] = file["core-metadata"]
         elif "dist-info-metadata" in file and "core-metadata" not in file:
