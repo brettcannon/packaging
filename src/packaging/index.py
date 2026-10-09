@@ -12,6 +12,7 @@ import contextlib
 import html.parser  # HTMLParser used as a base class.
 import json
 import typing  # The `from ... import` forces an eager import.
+import urllib.parse
 from typing import Literal, TypedDict  # TypedDict is used as a base class.
 
 from . import utils
@@ -233,11 +234,13 @@ def parse_list(content_type: str, data: str) -> RawProjectList:
 class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
     files: list[RawProjectDetailsFile]
     current_file: dict[str, typing.Any]
+    url_parts: dict[str, urllib.parse.SplitResult]
 
     def __init__(self) -> None:
         super().__init__()
         self.files = []
         self.current_file = self._new_file()
+        self.url_parts = {}
 
     def _new_file(self) -> dict[str, typing.Any]:
         return {"hashes": {}}
@@ -261,8 +264,14 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
                     method(value)
 
     def _handle_href(self, value: str | None) -> None:
-        if value and self.current_file:
+        if value:
             self.current_file["url"] = value
+            self.url_parts[value] = url_parts = urllib.parse.urlsplit(value)
+            if fragment := url_parts.fragment:
+                if fragment.count("=") != 1:
+                    raise InvalidHTMLAttributeValue("href", value)
+                hash_algo, _, hash_value = fragment.partition("=")
+                self.current_file["hashes"][hash_algo] = hash_value
 
     def _process_metadata(self, key: str, value: str | None) -> None:
         result: dict[str, str] | bool = True
@@ -389,7 +398,6 @@ def parse_details(
 # FYI Mousebender statically sets it to 1.0, but that was before the HTML API
 # had a way to declare the API version.
 
-# hash                                 https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=Each%20file%20URL%20SHOULD%20include%20a%20hash%20in%20the%20form%20of%20a%20URL%20fragment%20with%20the%20following%20syntax%3A%20%23%3Chashname%3E%3D%3Chashvalue%3E
 # data-requires-python (needs unescaping!)  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Drequires,%26lt%3B%20and%20%26gt%3B%2C%20respectively.
 # data-yanked                               https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=The%20data%2Dyanked%20attribute%20may%20have%20no%20value%2C%20or%20may%20have%20an%20arbitrary%20string%20as%20a%20value.%20The%20presence%20of%20a%20data%2Dyanked%20attribute%20SHOULD%20be%20interpreted%20as%20indicating%20that%20the%20file%20pointed%20to%20by%20this%20particular%20link%20has%20been%20%E2%80%9CYanked%E2%80%9D
 # data-provenance                           https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Dprovenance%20attribute%20on%20a%20file%20link.%20The%20value%20of%20this%20attribute%20MUST%20be%20a%20fully%20qualified%20URL

@@ -8,6 +8,10 @@ from packaging import index
 HTML_CONTENT_TYPE = index._ACCEPT_HTML_VALUES[0]
 
 
+def is_exception(exc: object) -> bool:
+    return isinstance(exc, type) and issubclass(exc, index.IndexServerException)
+
+
 class ParseBaseTests:
     def test_invalid_content_type(self) -> None:
         raise NotImplementedError
@@ -299,6 +303,48 @@ class TestParseDetails(ParseBaseTests):
         assert result == expect
 
     @pytest.mark.parametrize(
+        ("url", "hash"),
+        [
+            ("https://example.com/spam#sha256=abcd1234", {"sha256": "abcd1234"}),
+            ("https://example.com/spam#SHA256=abcd1234", {"sha256": "abcd1234"}),
+            ("https://example.com/spam", {}),
+            ("https://example.com/spam/", {}),
+            (
+                "https://example.com/spam#sha256==abcd1234",
+                index.InvalidHTMLAttributeValue,
+            ),
+        ],
+    )
+    def test_hashes(
+        self, url: str, hash: dict[str, str] | type[index.IndexServerException]
+    ) -> None:
+        given = f"""
+            <html>
+            <body>
+            <a href="{url}">spam-1.0.tar.gz</a>
+            </body>
+            </html>
+        """
+        if is_exception(hash):
+            with pytest.raises(hash):
+                index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+        else:
+            expect: index.RawProjectDetails = {
+                "meta": {"api-version": "1.0"},
+                "name": "spam",
+                "files": [
+                    {
+                        "filename": "spam-1.0.tar.gz",
+                        "url": url,
+                        "hashes": hash,
+                    }
+                ],
+            }
+            result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+
+            assert result == expect
+
+    @pytest.mark.parametrize(
         ("attr_value", "json_value"),
         [
             ("=true", True),
@@ -325,9 +371,7 @@ class TestParseDetails(ParseBaseTests):
             </body>
             </html>
         """
-        if isinstance(json_value, type) and issubclass(
-            json_value, index.IndexServerException
-        ):
+        if is_exception(json_value):
             with pytest.raises(json_value):
                 index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
         else:
@@ -375,9 +419,7 @@ class TestParseDetails(ParseBaseTests):
             </body>
             </html>
         """
-        if isinstance(json_value, type) and issubclass(
-            json_value, index.IndexServerException
-        ):
+        if is_exception(json_value):
             with pytest.raises(json_value):
                 index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
         else:
@@ -420,9 +462,7 @@ class TestParseDetails(ParseBaseTests):
             </body>
             </html>
         """
-        if isinstance(json_value, type) and issubclass(
-            json_value, index.IndexServerException
-        ):
+        if is_exception(json_value):
             with pytest.raises(json_value):
                 index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
         else:
