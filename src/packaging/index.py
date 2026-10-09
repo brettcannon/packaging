@@ -308,6 +308,11 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
     def _handle_data_yanked(self, value: str | None) -> None:
         self.current_file["yanked"] = True if value is None else value
 
+    def _handle_data_provenance(self, value: str | None) -> None:
+        if value is None:
+            raise InvalidHTMLAttributeValue("data-provenance", value)
+        self.current_file["provenance"] = value
+
     def handle_data(self, data: str) -> None:
         self.current_file["filename"] = data.strip()
 
@@ -413,5 +418,4 @@ def parse_details(
     return project_details
 
 
-# data-provenance                           https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20a%20data%2Dprovenance%20attribute%20on%20a%20file%20link.%20The%20value%20of%20this%20attribute%20MUST%20be%20a%20fully%20qualified%20URL
 # pypi:project-status / pypi:project-status-reason  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20pypi,an%20arbitrary%20string%20if%20present.

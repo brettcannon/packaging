@@ -595,6 +595,49 @@ class TestParseDetails(ParseBaseTests):
         assert result == expect
 
     @pytest.mark.parametrize(
+        ("attr", "value"),
+        [
+            (
+                '="https://example.com/spam/provenance"',
+                "https://example.com/spam/provenance",
+            ),
+            ("", index.InvalidHTMLAttributeValue),
+        ],
+    )
+    def test_html_provenance(
+        self, attr: str, value: str | type[index.IndexServerException]
+    ) -> None:
+        given = f"""
+            <html>
+            <body>
+            <a
+                href="https://example.com/spam/spam-1.0.tar.gz"
+                data-provenance{attr}
+            >spam-1.0.tar.gz</a>
+            </body>
+            </html>
+        """
+        if is_exception(value):
+            with pytest.raises(value):
+                index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+        else:
+            expect: index.RawProjectDetails = {
+                "meta": {"api-version": "1.0"},
+                "name": "spam",
+                "files": [
+                    {
+                        "filename": "spam-1.0.tar.gz",
+                        "url": "https://example.com/spam/spam-1.0.tar.gz",
+                        "hashes": {},
+                        "provenance": value,
+                    }
+                ],
+            }
+            result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+
+            assert result == expect
+
+    @pytest.mark.parametrize(
         ("content_type", "data", "args"),
         [
             (
