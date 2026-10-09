@@ -4,8 +4,8 @@ Index
 
 .. module:: packaging.index
 
-Help make requests to and work with responses from index servers implementing the
-:ref:`Simple Repository API <simple-repository-api>`.
+Help make requests to and work with responses from index servers implementing
+the :ref:`Simple Repository API <simple-repository-api>`.
 
 Usage
 -----
