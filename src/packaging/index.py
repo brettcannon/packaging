@@ -128,8 +128,11 @@ class RawProjectDetailsFile(
     """  # noqa: E501
 
 
+_PROJECT_STATUSES = Literal["active", "archived", "quarantined", "deprecated"]
+
+
 class _RawProjectDetailsStatus(TypedDict, total=False):
-    status: Literal["active", "archived", "quarantined", "deprecated"]
+    status: _PROJECT_STATUSES
     reason: str
 
 
@@ -265,16 +268,18 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
         self.current_file = self._new_file()
         for name, value in attrs.items():
             method_name = f"_handle_{name.replace('-', '_')}"
-            if hasattr(self, method_name):
+            if hasattr(self, method_name):  # pragma: no cover
                 getattr(self, method_name)(value)
 
     def _handle_href(self, value: str | None) -> None:
-        if value:
+        if value:  # pragma: no cover
             self.current_file["url"] = value
             if fragment := urllib.parse.urlsplit(value).fragment:
                 if fragment.count("=") != 1:
                     raise InvalidHTMLAttributeValue("a", "href", value)
                 hash_algo, _, hash_value = fragment.partition("=")
+                if not hash_algo or not hash_value:
+                    raise InvalidHTMLAttributeValue("a", "href", value)
                 self.current_file["hashes"][hash_algo] = hash_value
 
     def _process_metadata(self, key: str, value: str | None) -> None:
@@ -282,7 +287,7 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
         if value:
             if "=" in value:
                 hash_algo, _, hash_value = value.partition("=")
-                if not (hash_algo and hash_value):
+                if not hash_algo or not hash_value:
                     raise InvalidHTMLAttributeValue("a", f"data-{key}", value)
                 result = {hash_algo: hash_value}
             elif value != "true":
@@ -379,13 +384,17 @@ def parse_details(
     names as keys will have those name lowercased.
     """
     if name is None and request_url is None:
-        raise TypeError("expected either *name* or *request_url* to be provided")
+        raise TypeError("expected either 'name' or request_url to be provided")
     content_type = content_type.lower()
     project_details: RawProjectDetails
     if content_type == ACCEPT_JSON_V1:
         project_details = json.loads(data)
     # Watch out for content types that specify the encoding!
-    elif any(content_type.startswith(mime_type) for mime_type in _ACCEPT_HTML_VALUES):
+    elif not any(
+        content_type.startswith(mime_type) for mime_type in _ACCEPT_HTML_VALUES
+    ):
+        raise InvalidContentType(content_type)
+    else:
         with contextlib.closing(_RawProjectDetailsHTMLParser()) as parser:
             parser.feed(data)
         meta = typing.cast("_RawProjectMeta", {"api-version": parser.api_version})
@@ -393,7 +402,8 @@ def parse_details(
         if name:
             project_name = name
         else:
-            path = urllib.parse.urlsplit(request_url).path
+            # request_url is guaranteed to be a string if 'name' is not set.
+            path = typing.cast("str", urllib.parse.urlsplit(request_url).path)
             project_name = path.removesuffix("/").rpartition("/")[-1]
 
         project_details = {
@@ -403,7 +413,9 @@ def parse_details(
         }
 
         if parser.status:
-            project_details.setdefault("project-status", {})["status"] = parser.status
+            project_details.setdefault("project-status", {})["status"] = typing.cast(
+                "_PROJECT_STATUSES", parser.status
+            )
 
         if parser.status_reason:
             project_details.setdefault("project-status", {})["reason"] = (

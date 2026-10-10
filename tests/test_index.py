@@ -1,5 +1,6 @@
 import json
 import typing
+from typing import TypeGuard
 
 import pytest
 
@@ -8,7 +9,7 @@ from packaging import index
 HTML_CONTENT_TYPE = index._ACCEPT_HTML_VALUES[0]
 
 
-def is_exception(exc: object) -> bool:
+def is_exception(exc: object) -> TypeGuard[type[index.IndexServerException]]:
     return isinstance(exc, type) and issubclass(exc, index.IndexServerException)
 
 
@@ -175,7 +176,7 @@ class TestParseList(ParseBaseTests):
 class TestParseDetails(ParseBaseTests):
     def test_invalid_content_type(self) -> None:
         with pytest.raises(index.InvalidContentType):
-            index.parse_list("invalid/content-type", "")
+            index.parse_details("invalid/content-type", "", name="spam")
 
     @pytest.mark.parametrize(
         "content_type", [*index._ACCEPT_HTML_VALUES, "text/html; charset=utf-8"]
@@ -358,12 +359,15 @@ class TestParseDetails(ParseBaseTests):
             with pytest.raises(index.InvalidHTMLAttributeValue):
                 index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
         else:
-            expect: index.RawProjectDetails = {
-                "meta": {"api-version": "1.0"},
-                "name": "spam",
-                "project-status": {"status": expect_status},
-                "files": [],
-            }
+            expect: index.RawProjectDetails = typing.cast(
+                "index.RawProjectDetails",
+                {
+                    "meta": {"api-version": "1.0"},
+                    "name": "spam",
+                    "project-status": {"status": expect_status},
+                    "files": [],
+                },
+            )
             result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
             assert result == expect
@@ -441,6 +445,8 @@ class TestParseDetails(ParseBaseTests):
                 "https://example.com/spam#sha256==abcd1234",
                 index.InvalidHTMLAttributeValue,
             ),
+            ("https://example.com/spam#sha256=", index.InvalidHTMLAttributeValue),
+            ("https://example.com/spam#=abcd1234", index.InvalidHTMLAttributeValue),
         ],
     )
     def test_html_hashes(
@@ -457,17 +463,20 @@ class TestParseDetails(ParseBaseTests):
             with pytest.raises(hash):
                 index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
         else:
-            expect: index.RawProjectDetails = {
-                "meta": {"api-version": "1.0"},
-                "name": "spam",
-                "files": [
-                    {
-                        "filename": "spam-1.0.tar.gz",
-                        "url": url,
-                        "hashes": hash,
-                    }
-                ],
-            }
+            expect: index.RawProjectDetails = typing.cast(
+                "index.RawProjectDetails",
+                {
+                    "meta": {"api-version": "1.0"},
+                    "name": "spam",
+                    "files": [
+                        {
+                            "filename": "spam-1.0.tar.gz",
+                            "url": url,
+                            "hashes": hash,
+                        }
+                    ],
+                },
+            )
             result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
             assert result == expect
@@ -479,6 +488,8 @@ class TestParseDetails(ParseBaseTests):
             ("", True),  # Spec doesn't say this is right, but it's unambiguous.
             ('="sha256=12345abcde"', {"sha256": "12345abcde"}),
             ('="SHA256=12345abcde"', {"sha256": "12345abcde"}),
+            ('="sha256="', index.InvalidHTMLAttributeValue),
+            ('="=12345abcde"', index.InvalidHTMLAttributeValue),
             ("=false", index.InvalidHTMLAttributeValue),
         ],
     )
@@ -503,19 +514,22 @@ class TestParseDetails(ParseBaseTests):
             with pytest.raises(json_value):
                 index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
         else:
-            expect: index.RawProjectDetails = {
-                "meta": {"api-version": "1.0"},
-                "name": "spam",
-                "files": [
-                    {
-                        "filename": "spam-1.0.tar.gz",
-                        "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
-                        "hashes": {},
-                        "core-metadata": json_value,
-                        "dist-info-metadata": json_value,
-                    }
-                ],
-            }
+            expect: index.RawProjectDetails = typing.cast(
+                "index.RawProjectDetails",
+                {
+                    "meta": {"api-version": "1.0"},
+                    "name": "spam",
+                    "files": [
+                        {
+                            "filename": "spam-1.0.tar.gz",
+                            "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                            "hashes": {},
+                            "core-metadata": json_value,
+                            "dist-info-metadata": json_value,
+                        }
+                    ],
+                },
+            )
             result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
             assert result == expect
@@ -551,19 +565,22 @@ class TestParseDetails(ParseBaseTests):
             with pytest.raises(json_value):
                 index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
         else:
-            expect: index.RawProjectDetails = {
-                "meta": {"api-version": "1.0"},
-                "name": "spam",
-                "files": [
-                    {
-                        "filename": "spam-1.0.tar.gz",
-                        "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
-                        "hashes": {},
-                        "dist-info-metadata": json_value,
-                        "core-metadata": json_value,
-                    }
-                ],
-            }
+            expect: index.RawProjectDetails = typing.cast(
+                "index.RawProjectDetails",
+                {
+                    "meta": {"api-version": "1.0"},
+                    "name": "spam",
+                    "files": [
+                        {
+                            "filename": "spam-1.0.tar.gz",
+                            "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                            "hashes": {},
+                            "dist-info-metadata": json_value,
+                            "core-metadata": json_value,
+                        }
+                    ],
+                },
+            )
             result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
             assert result == expect
@@ -635,18 +652,21 @@ class TestParseDetails(ParseBaseTests):
             with pytest.raises(specifier_value):
                 index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
         else:
-            expect: index.RawProjectDetails = {
-                "meta": {"api-version": "1.0"},
-                "name": "spam",
-                "files": [
-                    {
-                        "filename": "spam-1.0.tar.gz",
-                        "url": "https://example.com/spam/spam-1.0.tar.gz",
-                        "hashes": {},
-                        "requires-python": specifier_value,
-                    }
-                ],
-            }
+            expect: index.RawProjectDetails = typing.cast(
+                "index.RawProjectDetails",
+                {
+                    "meta": {"api-version": "1.0"},
+                    "name": "spam",
+                    "files": [
+                        {
+                            "filename": "spam-1.0.tar.gz",
+                            "url": "https://example.com/spam/spam-1.0.tar.gz",
+                            "hashes": {},
+                            "requires-python": specifier_value,
+                        }
+                    ],
+                },
+            )
             result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
             assert result == expect
@@ -706,18 +726,21 @@ class TestParseDetails(ParseBaseTests):
             with pytest.raises(value):
                 index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
         else:
-            expect: index.RawProjectDetails = {
-                "meta": {"api-version": "1.0"},
-                "name": "spam",
-                "files": [
-                    {
-                        "filename": "spam-1.0.tar.gz",
-                        "url": "https://example.com/spam/spam-1.0.tar.gz",
-                        "hashes": {},
-                        "provenance": value,
-                    }
-                ],
-            }
+            expect: index.RawProjectDetails = typing.cast(
+                "index.RawProjectDetails",
+                {
+                    "meta": {"api-version": "1.0"},
+                    "name": "spam",
+                    "files": [
+                        {
+                            "filename": "spam-1.0.tar.gz",
+                            "url": "https://example.com/spam/spam-1.0.tar.gz",
+                            "hashes": {},
+                            "provenance": value,
+                        }
+                    ],
+                },
+            )
             result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
             assert result == expect
@@ -789,3 +812,7 @@ class TestParseDetails(ParseBaseTests):
         result = index.parse_details(HTML_CONTENT_TYPE, given, request_url=request_url)
 
         assert result == expect
+
+    def test_name_or_request_url_provided(self) -> None:
+        with pytest.raises(TypeError):
+            index.parse_details(HTML_CONTENT_TYPE, "")  # type: ignore[call-overload]
