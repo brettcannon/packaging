@@ -38,15 +38,17 @@ class InvalidContentType(ValueError, IndexServerException):
 
 
 class InvalidHTMLAttributeValue(ValueError, IndexServerException):
-    """Invalid data returned from an index server serving HTML data."""
+    """Invalid HTML tag value returned from an index server."""
 
+    tag: str
     attr: str
     value: str
 
-    def __init__(self, attr: str, value: object) -> None:
+    def __init__(self, tag: str, attr: str, value: object) -> None:
+        self.tag = tag
         self.attr = attr
         self.value = repr(value)
-        super().__init__(f"invalid value for HTML attribute {self.attr}: {self.value}")
+        super().__init__(f"invalid value for HTML <{tag} {self.attr}>: {self.value}")
 
 
 ACCEPT_JSON_V1 = "application/vnd.pypi.simple.v1+json"
@@ -76,9 +78,7 @@ class RawProjectList(TypedDict):
 
     # 1.0
     meta: _RawProjectMeta
-    projects: list[
-        dict[Literal["name"], str]  # XXX Type for non-normalized project names?
-    ]
+    projects: list[dict[Literal["name"], str]]
 
 
 # This class only contains keys required across **all** API versions.
@@ -100,7 +100,7 @@ _RawProjectDetailsFileOptional = TypedDict(
     "_RawProjectDetailsFileOptional",
     {
         # 1.0
-        "requires-python": str,  # XXX specific type for specifier strings?
+        "requires-python": str,
         "dist-info-metadata": bool | dict[str, str],  # Deprecated
         "gpg-sig": bool,
         "yanked": bool | str,
@@ -108,7 +108,7 @@ _RawProjectDetailsFileOptional = TypedDict(
         "core-metadata": bool | dict[str, str],
         # 1.1
         "size": int,  # Mandatory for 1.1+, but not available for the HTML API.
-        "upload-time": str,  # XXX specific type for timestamps?
+        "upload-time": str,
         # 1.3
         "provenance": str | None,
     },
@@ -137,7 +137,7 @@ class _RawProjectDetailsStatus(TypedDict, total=False):
 class _RawProjectDetailsRequired(TypedDict):
     # 1.0
     meta: _RawProjectMeta
-    name: str  # XXX Or utils.NormalizedName?
+    name: str
     files: list[RawProjectDetailsFile]
 
 
@@ -145,7 +145,7 @@ _RawProjectDetailsOptional = TypedDict(
     "_RawProjectDetailsOptional",
     {
         # 1.1
-        "versions": list[str],  # XXX Type for version strings?
+        "versions": list[str],
         # 1.4
         "project-status": _RawProjectDetailsStatus,
     },
@@ -166,13 +166,22 @@ class RawProjectDetails(_RawProjectDetailsRequired, _RawProjectDetailsOptional):
 class _RawProjectMetaHTMLParser(html.parser.HTMLParser):
     api_version: str = "1.0"
 
-    def _handle_meta(self, attrs: dict[str, str | None]) -> None:
-        if (
-            "content" in attrs
-            and attrs["content"] is not None
-            and attrs.get("name") == "pypi:repository-version"
-        ):
-            self.api_version = attrs["content"]
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag_method = f"_handle_{tag}_tag"
+        if hasattr(self, tag_method):
+            attr_dict = dict(attrs)
+            getattr(self, tag_method)(attr_dict)
+
+    def _handle_meta_tag(self, attrs: dict[str, str | None]) -> None:
+        if (name := attrs.get("name")) and name.startswith("pypi:"):
+            if not (content := attrs.get("content")):
+                raise InvalidHTMLAttributeValue("meta", "content", content)
+            pypi_name = name.removeprefix("pypi:")
+            method_name = f"_handle_{pypi_name.replace('-', '_')}_content"
+            getattr(self, method_name)(content)
+
+    def _handle_repository_version_content(self, content: str) -> None:
+        self.api_version = content
 
 
 class _RawProjectListHTMLParser(_RawProjectMetaHTMLParser):
@@ -184,12 +193,8 @@ class _RawProjectListHTMLParser(_RawProjectMetaHTMLParser):
         self.names = []
         self.parsing_anchor = False
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == "a":
-            self.parsing_anchor = True
-        elif tag == "meta" and attrs:
-            attrs_dict = dict(attrs)
-            self._handle_meta(attrs_dict)
+    def _handle_a_tag(self, _attrs: dict[str, str | None]) -> None:
+        self.parsing_anchor = True
 
     def handle_data(self, data: str) -> None:
         if self.parsing_anchor:
@@ -236,6 +241,8 @@ def parse_list(content_type: str, data: str) -> RawProjectList:
 class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
     files: list[RawProjectDetailsFile]
     current_file: dict[str, typing.Any]
+    status: str | None = None
+    status_reason: str | None = None
 
     def __init__(self) -> None:
         super().__init__()
@@ -245,30 +252,28 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
     def _new_file(self) -> dict[str, typing.Any]:
         return {"hashes": {}}
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag not in {"a", "meta"}:
-            return
+    def _handle_project_status_content(self, content: str) -> None:
+        content_lower = content.lower()
+        if content_lower not in {"active", "archived", "quarantined", "deprecated"}:
+            raise InvalidHTMLAttributeValue("meta", "content", content)
+        self.status = content_lower
 
-        attrs_dict = dict(attrs)
+    def _handle_project_status_reason_content(self, content: str) -> None:
+        self.status_reason = content
 
-        if tag == "meta":
-            self._handle_meta(attrs_dict)
-        else:  # "a"
-            self.current_file = self._new_file()
-            for name, value in attrs_dict.items():
-                try:
-                    method = getattr(self, f"_handle_{name.replace('-', '_')}")
-                except AttributeError:  # noqa: PERF203
-                    continue
-                else:
-                    method(value)
+    def _handle_a_tag(self, attrs: dict[str, str | None]) -> None:
+        self.current_file = self._new_file()
+        for name, value in attrs.items():
+            method_name = f"_handle_{name.replace('-', '_')}"
+            if hasattr(self, method_name):
+                getattr(self, method_name)(value)
 
     def _handle_href(self, value: str | None) -> None:
         if value:
             self.current_file["url"] = value
             if fragment := urllib.parse.urlsplit(value).fragment:
                 if fragment.count("=") != 1:
-                    raise InvalidHTMLAttributeValue("href", value)
+                    raise InvalidHTMLAttributeValue("a", "href", value)
                 hash_algo, _, hash_value = fragment.partition("=")
                 self.current_file["hashes"][hash_algo] = hash_value
 
@@ -278,10 +283,10 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
             if "=" in value:
                 hash_algo, _, hash_value = value.partition("=")
                 if not (hash_algo and hash_value):
-                    raise InvalidHTMLAttributeValue(f"data-{key}", value)
+                    raise InvalidHTMLAttributeValue("a", f"data-{key}", value)
                 result = {hash_algo: hash_value}
             elif value != "true":
-                raise InvalidHTMLAttributeValue(f"data-{key}", value)
+                raise InvalidHTMLAttributeValue("a", f"data-{key}", value)
         self.current_file[key] = result
 
     def _handle_data_core_metadata(self, value: str | None) -> None:
@@ -297,12 +302,12 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
             case "false":
                 has_sig = False
             case _:
-                raise InvalidHTMLAttributeValue("data-gpg-sig", value)
+                raise InvalidHTMLAttributeValue("a", "data-gpg-sig", value)
         self.current_file["gpg-sig"] = has_sig
 
     def _handle_data_requires_python(self, value: str | None) -> None:
         if value is None:
-            raise InvalidHTMLAttributeValue("data-requires-python", value)
+            raise InvalidHTMLAttributeValue("a", "data-requires-python", value)
         self.current_file["requires-python"] = html.unescape(value)
 
     def _handle_data_yanked(self, value: str | None) -> None:
@@ -310,7 +315,7 @@ class _RawProjectDetailsHTMLParser(_RawProjectMetaHTMLParser):
 
     def _handle_data_provenance(self, value: str | None) -> None:
         if value is None:
-            raise InvalidHTMLAttributeValue("data-provenance", value)
+            raise InvalidHTMLAttributeValue("a", "data-provenance", value)
         self.current_file["provenance"] = value
 
     def handle_data(self, data: str) -> None:
@@ -396,7 +401,14 @@ def parse_details(
             "name": utils.canonicalize_name(project_name),
             "files": parser.files,
         }
-        # XXX status
+
+        if parser.status:
+            project_details.setdefault("project-status", {})["status"] = parser.status
+
+        if parser.status_reason:
+            project_details.setdefault("project-status", {})["reason"] = (
+                parser.status_reason
+            )
 
     project_details["name"] = utils.canonicalize_name(project_details["name"])
     for file in project_details["files"]:
@@ -416,6 +428,3 @@ def parse_details(
             file["url"] = urllib.parse.urljoin(request_url, file["url"])
 
     return project_details
-
-
-# pypi:project-status / pypi:project-status-reason  https://packaging.python.org/en/latest/specifications/simple-repository-api/#project-detail:~:text=A%20repository%20MAY%20include%20pypi,an%20arbitrary%20string%20if%20present.

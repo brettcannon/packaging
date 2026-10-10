@@ -73,10 +73,15 @@ class TestParseList(ParseBaseTests):
             ('<meta name="pypi:repository-version" content="1.4">', "1.4"),
             ('<meta name="pypi:repository-version" content="1.4" />', "1.4"),
             ('<meta content="1.4" ></meta>', "1.0"),
-            ('<meta name="pypi:repository-version"></meta', "1.0"),
+            (
+                '<meta name="pypi:repository-version"></meta>',
+                index.InvalidHTMLAttributeValue,
+            ),
         ],
     )
-    def test_html_api_version(self, meta_tag: str, api_version: str) -> None:
+    def test_html_api_version(
+        self, meta_tag: str, api_version: str | type[index.IndexServerException]
+    ) -> None:
         html = f"""
             <!DOCTYPE html>
             <html>
@@ -89,15 +94,20 @@ class TestParseList(ParseBaseTests):
             </body>
             </html>
         """
-        expect: index.RawProjectList = typing.cast(
-            "index.RawProjectList",
-            {
-                "meta": {"api-version": api_version},
-                "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
-            },
-        )
-        result = index.parse_list(HTML_CONTENT_TYPE, html)
-        assert result == expect
+        if is_exception(api_version):
+            with pytest.raises(api_version):
+                index.parse_list(HTML_CONTENT_TYPE, html)
+        else:
+            expect: index.RawProjectList = typing.cast(
+                "index.RawProjectList",
+                {
+                    "meta": {"api-version": api_version},
+                    "projects": [{"name": "frob"}, {"name": "spamspamspam"}],
+                },
+            )
+            result = index.parse_list(HTML_CONTENT_TYPE, html)
+
+            assert result == expect
 
     def test_html_data_whitespace(self) -> None:
         html = """
@@ -237,10 +247,15 @@ class TestParseDetails(ParseBaseTests):
             ('<meta name="pypi:repository-version" content="1.4">', "1.4"),
             ('<meta name="pypi:repository-version" content="1.4" />', "1.4"),
             ('<meta content="1.4" ></meta>', "1.0"),
-            ('<meta name="pypi:repository-version"></meta', "1.0"),
+            (
+                '<meta name="pypi:repository-version"></meta>',
+                index.InvalidHTMLAttributeValue,
+            ),
         ],
     )
-    def test_html_api_version(self, meta_tag: str, api_version: str) -> None:
+    def test_html_api_version(
+        self, meta_tag: str, api_version: str | type[index.IndexServerException]
+    ) -> None:
         given = f"""
             <html>
             <head>
@@ -250,23 +265,27 @@ class TestParseDetails(ParseBaseTests):
             </body>
             </html>
         """
-        expect: index.RawProjectDetails = typing.cast(
-            "index.RawProjectDetails",
-            {
-                "meta": {"api-version": api_version},
-                "name": "spam",
-                "files": [
-                    {
-                        "filename": "spam-1.0.tar.gz",
-                        "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
-                        "hashes": {},
-                    }
-                ],
-            },
-        )
-        result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+        if is_exception(api_version):
+            with pytest.raises(api_version):
+                index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+        else:
+            expect: index.RawProjectDetails = typing.cast(
+                "index.RawProjectDetails",
+                {
+                    "meta": {"api-version": api_version},
+                    "name": "spam",
+                    "files": [
+                        {
+                            "filename": "spam-1.0.tar.gz",
+                            "url": "https://files.pythonhosted.org/spam/spam-1.0.tar.gz",
+                            "hashes": {},
+                        }
+                    ],
+                },
+            )
+            result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
-        assert result == expect
+            assert result == expect
 
     def test_html_data_whitespace(self) -> None:
         given = """
@@ -311,6 +330,72 @@ class TestParseDetails(ParseBaseTests):
                     "hashes": {},
                 }
             ],
+        }
+        result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+
+        assert result == expect
+
+    @pytest.mark.parametrize(
+        ("given_status", "expect_status", "ok"),
+        [
+            ("active", "active", True),
+            ("archived", "archived", True),
+            ("quarantined", "quarantined", True),
+            ("deprecated", "deprecated", True),
+            ("Active", "active", True),
+            ("spam", "", False),
+        ],
+    )
+    def test_html_project_status(
+        self, given_status: str, expect_status: str, ok: bool
+    ) -> None:
+        given = f"""
+            <html>
+            <meta name="pypi:project-status" content="{given_status}" />
+            </html>
+        """
+        if not ok:
+            with pytest.raises(index.InvalidHTMLAttributeValue):
+                index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+        else:
+            expect: index.RawProjectDetails = {
+                "meta": {"api-version": "1.0"},
+                "name": "spam",
+                "project-status": {"status": expect_status},
+                "files": [],
+            }
+            result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+
+            assert result == expect
+
+    def test_html_project_reason(self) -> None:
+        given = """
+            <html>
+            <meta name="pypi:project-status-reason" content="something" />
+            </html>
+        """
+        expect: index.RawProjectDetails = {
+            "meta": {"api-version": "1.0"},
+            "name": "spam",
+            "project-status": {"reason": "something"},
+            "files": [],
+        }
+        result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
+
+        assert result == expect
+
+    def test_html_project_status_complete(self) -> None:
+        given = """
+            <html>
+            <meta name="pypi:project-status" content="active" />
+            <meta name="pypi:project-status-reason" content="something" />
+            </html>
+        """
+        expect: index.RawProjectDetails = {
+            "meta": {"api-version": "1.0"},
+            "name": "spam",
+            "project-status": {"status": "active", "reason": "something"},
+            "files": [],
         }
         result = index.parse_details(HTML_CONTENT_TYPE, given, name="spam")
 
